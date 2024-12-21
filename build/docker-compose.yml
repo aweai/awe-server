@@ -1,0 +1,57 @@
+---
+name: owe
+services:
+  redis:
+    image: redis:7.4.1-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server --loglevel warning --requirepass aweredis
+  server:
+    image: awe:dev
+    container_name: awe_server
+    restart: always
+    command: /app/venv/bin/python -m alembic upgrade head && /app/venv/bin/python run.py
+    volumes:
+      - "./persisted_data:/app/persisted_data"
+      - "./models:/app/models"
+    ports:
+      - '7777:7777'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  worker_llm:
+    image: awe:dev
+    container_name: awe_worker_llm
+    restart: always
+    command: /app/venv/bin/python -m celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=llm --pool=solo
+    volumes:
+      - "./persisted_data:/app/persisted_data"
+      - "./models:/app/models"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  # worker_sd:
+  #   image: awe:dev
+  #   container_name: awe_worker_sd
+  #   restart: always
+  #   command: /app/venv/bin/python -m celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=sd --pool=solo
+  #   volumes:
+  #     - "./persisted_data:/app/persisted_data"
+  #     - "./models:/app/models"
+  #   deploy:
+  #       resources:
+  #         reservations:
+  #           devices:
+  #             - driver: nvidia
+  #               count: all
+  #               capabilities: [gpu]

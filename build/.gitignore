@@ -1,0 +1,6 @@
+*
+!models
+!persisted_data
+!docker-compose.yml
+!Dockerfile
+!.gitignore

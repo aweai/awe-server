@@ -1,0 +1,16 @@
+langchain==0.3.7
+langchain-community==0.3.7
+transformers==4.46.2
+python-dotenv==1.0.1
+python_telegram_bot==21.7
+celery[redis]==5.4.0
+fastapi[standard]==0.115.5
+sqlmodel==0.0.22
+solders==0.21.0
+solana==0.35.1
+pillow==11.0.0
+pymysql==1.1.1
+alembic==1.14.0
+redis[hiredis]==5.2.0
+python-multipart==0.0.17
+langchain-openai==0.2.14

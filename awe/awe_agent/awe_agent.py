@@ -92,6 +92,8 @@ class AweAgent:
 
         llm_log_handler = LLMInvocationLogHandler(user_agent_id)
 
+        verbose_output = os.getenv("LOG_LEVEL", "") == "DEBUG"
+
         if llm_type == "local":
             llm = RemoteLLM(
                 llm_config=config.llm_config,
@@ -110,7 +112,8 @@ class AweAgent:
                 max_tokens=max_tokens,
                 timeout=timeout,
                 max_retries=max_retries,
-                callbacks=[llm_log_handler]
+                callbacks=[llm_log_handler],
+                verbose=verbose_output
             )
 
         tools = []
@@ -140,7 +143,7 @@ class AweAgent:
         self.agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
-            verbose=True,
+            verbose=verbose_output,
             handle_parsing_errors=True,
             max_execution_time=timeout,
             max_iterations=5

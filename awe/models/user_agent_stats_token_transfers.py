@@ -5,6 +5,9 @@ from awe.models.user_agent_stats_token_transfer_daily_counts import UserAgentSta
 from typing import Tuple
 from awe.cache import cache
 from .utils import unix_timestamp_in_seconds, get_day_as_timestamp
+import logging
+
+logger = logging.getLogger("[Stats Token Transfers]")
 
 class AddressSet:
 
@@ -18,7 +21,11 @@ class AddressSet:
                 addresses = session.exec(current_statement).all()
 
                 if len(addresses) > 0:
-                    cache.sadd(redis_key, *addresses)
+                    try:
+                        cache.sadd(redis_key, *addresses)
+                    except Exception as e:
+                        logger.error(e)
+                        raise Exception("Error writing to Redis cache")
 
                 if len(addresses) < page_size:
                     return
@@ -46,11 +53,21 @@ class AddressSet:
         total_addresses_keys = "AGENT_STATS_ADDRESSES_TOTAL_" + str(user_agent_id)
 
         # Check if the data exists in redis
-        today_addresses = cache.scard(today_addresses_keys)
+        try:
+            today_addresses = cache.scard(today_addresses_keys)
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Error reading from Redis cache")
+
         if today_addresses == 0:
             self.load_addresses_from_db_for_today(day, user_agent_id, today_addresses_keys)
 
-        total_addresses = cache.scard(total_addresses_keys)
+        try:
+            total_addresses = cache.scard(total_addresses_keys)
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Error reading from Redis cache")
+
         if total_addresses == 0:
             self.load_addresses_from_db_total(user_agent_id, total_addresses_keys)
 

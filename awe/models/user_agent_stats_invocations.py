@@ -33,7 +33,11 @@ class UsersIdSet:
 
                 if len(user_ids) > 0:
                     logger.debug(f"Adding user_ids to redis: {user_ids}")
-                    cache.sadd(redis_key, *user_ids)
+                    try:
+                        cache.sadd(redis_key, *user_ids)
+                    except Exception as e:
+                        logger.error(e)
+                        raise Exception("Error writing to Redis cache")
 
                 if len(user_ids) < page_size:
                     return
@@ -64,12 +68,22 @@ class UsersIdSet:
         total_users_keys = "AGENT_STATS_USERS_TOTAL_" + str(user_agent_id)
 
         # Check if the data exists in redis
-        today_members = cache.scard(today_users_keys)
+        try:
+            today_members = cache.scard(today_users_keys)
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Error reading from Redis cache")
+
         if today_members == 0:
             logger.debug("today members zero from redis, load it from DB")
             self.load_user_ids_from_db_for_today(day, user_agent_id, today_users_keys)
 
-        total_members = cache.scard(total_users_keys)
+        try:
+            total_members = cache.scard(total_users_keys)
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Error reading from Redis cache")
+
         if total_members == 0:
             logger.debug("total members zero from redis, load it from DB")
             self.load_user_ids_from_db_total(user_agent_id, total_users_keys)

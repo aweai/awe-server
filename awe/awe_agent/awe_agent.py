@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from langchain.callbacks.base import AsyncCallbackHandler
 from typing import Dict, Any, List, Optional
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
+import asyncio
 
 import logging
 import traceback
@@ -45,7 +46,7 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
         tg_user_id = metadata["tg_user_id"]
 
         # Log the invocation
-        UserAgentStatsInvocations.add_invocation(self.user_agent_id, tg_user_id, AITools.LLM)
+        await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
 
 
 class AweAgent:

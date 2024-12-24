@@ -50,17 +50,6 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
         # Log the invocation
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
 
-    async def on_llm_end(self, response, *, run_id, parent_run_id = None, tags = None, **kwargs):
-
-        if os.getenv("LOG_LEVEL", "") != "DEBUG":
-            return
-
-        logger.debug("Response from LLM")
-
-        flattened_list = response.flatten()
-        for flattened in flattened_list:
-            logger.debug(flattened.llm_output)
-
 
 class AweAgent:
 

@@ -14,7 +14,7 @@ class AweTransferTool(AweTokenTool):
     name: str = "TransferAweToken"
     description: str =  (
         "Useful for when you need to transfer the AWE tokens to user."
-        "Input: an integer representing the amount of tokens you want to transfer to the user."
+        "Input: an integer wrapped as string, representing the amount of tokens you want to transfer to the user."
         "Output: the number of tokens transferred to the user"
     )
     return_direct: bool = True

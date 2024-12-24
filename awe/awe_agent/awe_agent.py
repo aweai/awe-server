@@ -15,6 +15,8 @@ import logging
 import traceback
 import os
 
+logger = logging.getLogger("[Awe Agent]")
+
 supported_llm = ["local", "openai"]
 
 llm_type = os.getenv("LLM", "")
@@ -47,6 +49,17 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
 
         # Log the invocation
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
+
+    async def on_llm_end(self, response, *, run_id, parent_run_id = None, tags = None, **kwargs):
+
+        if os.getenv("LOG_LEVEL", "") != "DEBUG":
+            return
+
+        logger.debug("Response from LLM")
+
+        flattened_list = response.flatten()
+        for flattened in flattened_list:
+            logger.debug(flattened.llm_output)
 
 
 class AweAgent:
@@ -88,8 +101,6 @@ class AweAgent:
 
     def __init__(self, user_agent_id: int, config: AgentConfig) -> None:
 
-        self.logger = logging.getLogger("[Awe Agent]")
-
         llm_log_handler = LLMInvocationLogHandler(user_agent_id)
 
         verbose_output = os.getenv("LOG_LEVEL", "") == "DEBUG"
@@ -113,7 +124,8 @@ class AweAgent:
                 timeout=timeout,
                 max_retries=max_retries,
                 callbacks=[llm_log_handler],
-                verbose=verbose_output
+                verbose=verbose_output,
+                disable_streaming=True
             )
 
         tools = []
@@ -196,8 +208,8 @@ class AweAgent:
 
             output = resp["output"]
         except Exception as e:
-            self.logger.error(e)
-            self.logger.error(traceback.format_exc())
+            logger.error(e)
+            logger.error(traceback.format_exc())
 
         resp_dict = {
             "text": None,

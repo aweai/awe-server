@@ -151,7 +151,7 @@ class AweAgent:
             max_iterations=5
         )
 
-        self.history_memories = []
+        self.history_memories = {}
 
         self.history_executor = RunnableWithMessageHistory(
             self.agent_executor,
@@ -160,7 +160,10 @@ class AweAgent:
             history_messages_key="chat_history"
         )
 
-    def _get_memory_for_session(self, session_id):
+    def _get_memory_for_session(self, session_id: str):
+
+        session_id = str(session_id)
+
         if session_id not in self.history_memories:
             self.history_memories[session_id] = ChatMessageHistory()
         return self.history_memories[session_id]

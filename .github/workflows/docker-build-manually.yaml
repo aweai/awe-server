@@ -51,9 +51,9 @@ jobs:
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-            type=sha, prefix=${{ branch }}-
-            type=raw, value=latest
+          tags: |
+              type=sha,prefix=${{ branch }}-
+              type=raw,value=latest
 
       - name:
         id: vars

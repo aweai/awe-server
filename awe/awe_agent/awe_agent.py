@@ -140,23 +140,30 @@ class AweAgent:
         timeout = os.getenv("AGENT_RESPONSE_TIMEOUT", 100)
         timeout = int(timeout)
 
+        handle_parsing_errors = int(os.getenv("AGENT_HANDLE_PARSING_ERRORS", 1)) == 1
+
         self.agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
             verbose=verbose_output,
-            handle_parsing_errors=True,
+            handle_parsing_errors=handle_parsing_errors,
             max_execution_time=timeout,
             max_iterations=5
         )
 
-        memory = ChatMessageHistory(session_id="test-session")
+        self.history_memories = []
 
         self.history_executor = RunnableWithMessageHistory(
             self.agent_executor,
-            lambda session_id: memory,
+            lambda session_id: self._get_memory_for_session(session_id),
             input_messages_key="input",
             history_messages_key="chat_history"
         )
+
+    def _get_memory_for_session(self, session_id):
+        if session_id not in self.history_memories:
+            self.history_memories[session_id] = ChatMessageHistory()
+        return self.history_memories[session_id]
 
     def _build_prompt_template(self, agent_preset_prompt: str) -> ChatPromptTemplate:
         return ChatPromptTemplate.from_messages(

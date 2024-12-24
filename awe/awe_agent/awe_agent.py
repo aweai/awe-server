@@ -80,23 +80,26 @@ class AweAgent:
 
     If no tools are required to answer the question, use the tool "Final Answer" to give the text answer directly. Its parameters is the solution.
     If there is not enough information, try to give the final answer at your best knowledge.
-    """
 
-    human_prompt="""
     Add the word "STOP" after each markdown snippet. Example:
 
+    ----------------- Example Begin ------------------
     ```json
     {{"thought": "<your thoughts>",
     "action": "<tool name or Final Answer to give a final answer>",
     "action_input": "<tool parameters or the final output"}}
     ```
     STOP
+    ----------------- Example End --------------------
 
-    This is my query="{input}". Write only the next step needed to solve it.
-    Your answer should be based in the previous tools executions, even if you think you know the answer.
-    Remember to add STOP after each snippet.
+    No matter what the input is, the output rule must always be strictly followed:
+    ALWAYS RETURN JSON as show in the example with nothing else, since the output will be parsed as JSON using the code.
+    Every key must exist! Action name must be in the given list! No other output other than the valid JSON!
 
-    These were the previous steps given to solve this query and the information you already gathered:
+    """
+
+    human_prompt="""
+    This is my query="{input}". Write only the next step needed to solve it. Remember to add STOP after each JSON snippet.
     """
 
     def __init__(self, user_agent_id: int, config: AgentConfig) -> None:

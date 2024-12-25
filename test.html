@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Awe - House of Memegents</title>
+        <style>
+            html, body {
+                position: relative;
+                display: block;
+                margin: 0;
+                padding: 0;
+                background-color: #0e0e16;
+                font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            }
+            .logo {
+                color: white;
+                font-size: 64px;
+                font-weight: 800;
+                text-align: center;
+                margin-top: 120px;
+            }
+            .logo .w {
+                color: #45f882;
+            }
+            .content {
+                position: relative;
+                width: 90%;
+                margin: 40px auto;
+                background-color: white;
+                border-radius: 10px;
+                overflow: hidden;
+                padding: 5%;
+                box-sizing: border-box;
+                text-align: center;
+            }
+            .content .message {
+                font-size: 30px;
+            }
+
+            .content .jump {
+                font-size: 16px;
+                color: #666;
+                margin-top: 64px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="logo">A<span class="w">W</span>E</div>
+        <div class="content">
+            <div class="message">__MESSAGE__</div>
+            <div class="jump">Automatically jump back to Telegram in a short while...</div>
+        </div>
+        <script type="text/javascript">
+            setTimeout(function(){
+                window.location = '__REDIRECT_LINK__';
+            }, 5000)
+        </script>
+    </body>
+</html>

@@ -69,8 +69,8 @@ class TGBot:
 
         address = await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, user_id)
 
-        if address == "":
-            text = "Your Solana wallet address is not set."
+        if address is None or address == "":
+            text = "You didn't bind your Solana wallet yet."
         else:
             text = f"Your Solana wallet address is {address}."
 

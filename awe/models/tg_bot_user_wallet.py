@@ -7,7 +7,8 @@ class TGBotUserWallet(SQLModel, table=True):
     tg_user_id: str = Field(index=True, nullable=False)
     user_agent_id: int = Field(index=True, nullable=False)
     address: str = Field(nullable=True)
-    session: str = Field(nullable=True)
+    phantom_session: str = Field(nullable=True)
+    phantom_encryption_public_key: str = Field(nullable=True)
 
     @classmethod
     def get_user_wallet_address(cls, user_agent_id: int, tg_user_id: str) -> str:

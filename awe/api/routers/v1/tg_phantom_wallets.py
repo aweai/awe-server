@@ -141,24 +141,42 @@ def handle_phantom_connect_callback(
 
         user_wallet.phantom_session = data_dict["session"]
         user_wallet.phantom_encryption_public_key = phantom_encryption_public_key
+
+        # Due to an unresolved bug the signMessage deeplink cannot be used right now.
+        # Let's just skip the wallet verification for now.
+        user_wallet.address = data_dict["public_key"]
+
         session.add(user_wallet)
         session.commit()
 
     # Redirect to Phantom again for wallet address verification
-    url = get_wallet_verification_url(
-        agent_id,
-        tg_user_id,
-        data_dict["public_key"],
-        data_dict["session"],
-        phantom_encryption_public_key
-    )
+    # url = get_wallet_verification_url(
+    #     agent_id,
+    #     tg_user_id,
+    #     data_dict["public_key"],
+    #     data_dict["session"],
+    #     phantom_encryption_public_key
+    # )
 
-    logger.debug(f"Phantom verification url: {url}")
+    # logger.debug(f"Phantom verification url: {url}")
+
+    # # Display success message and redirect back to TG
+    # html = notify_html_template.replace("__MESSAGE__", "One more step.<br/>We still need to verify your ownership of the wallet.")
+    # html = html.replace("__REDIRECT_LINK__", url)
+    # html = html.replace("__DEST_NAME__", "Phantom")
+    # return HTMLResponse(html)
+
+    # Get the TG Bot username to jump back
+    with Session(engine) as session:
+        statement = select(UserAgent).options(load_only(UserAgent.tg_bot)).where(UserAgent.id == agent_id)
+        user_agent = session.exec(statement).first()
+        if user_agent is None or user_agent.tg_bot is None or user_agent.tg_bot.username == "":
+            return {"errorMessage": "Invalid agent"}
 
     # Display success message and redirect back to TG
-    html = notify_html_template.replace("__MESSAGE__", "One more step.<br/>We still need to verify your ownership of the wallet.")
-    html = html.replace("__REDIRECT_LINK__", url)
-    html = html.replace("__DEST_NAME__", "Phantom")
+    html = notify_html_template.replace("__MESSAGE__", "Your wallet has been bound successfully!")
+    html = html.replace("__REDIRECT_LINK__", f"https://t.me/{user_agent.tg_bot.username}")
+    html = html.replace("__DEST_NAME__", "Telegram")
     return HTMLResponse(html)
 
 

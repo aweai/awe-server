@@ -70,11 +70,11 @@ class TGBot:
         address = await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, user_id)
 
         if address is None or address == "":
-            text = "You didn't bind your Solana wallet yet."
+            text = "You didn't bind your Solana wallet yet. Click the button below to bind your Solana wallet."
         else:
-            text = f"Your Solana wallet address is {address}."
+            text = f"Your Solana wallet address is {address}. Click the button below to bind a new wallet."
 
-        text = text + " Click the button below to bind your Solana wallet."
+        text = text + ""
 
         keyboard = [
             [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],

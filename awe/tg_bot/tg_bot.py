@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, constants
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, constants
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from awe.awe_agent.awe_agent import AweAgent
 from PIL import Image
@@ -9,7 +9,7 @@ import asyncio
 from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from ..models.tg_bot_user_wallet import TGBotUserWallet
-from awe.blockchain import awe_on_chain
+from awe.blockchain.phantom import get_connect_url
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -67,25 +67,22 @@ class TGBot:
             await self.send_response("User ID not found", update, context)
             return
 
-        if len(context.args) == 0:
-            # Get wallet address
-            address = await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, user_id)
-            if address == "":
-                await self.send_response({'text': 'Your Solana wallet address is not set. Use /wallet {address} to set your wallet address'}, update, context)
-            else:
-                await self.send_response({'text': f"Your Solana wallet address is {address}"}, update, context)
+        address = await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, user_id)
+
+        if address == "":
+            text = "Your Solana wallet address is not set."
         else:
-            # Set wallet address
-            address = context.args[0]
+            text = f"Your Solana wallet address is {address}."
 
-            # Check the validity of the address
-            is_valid = await asyncio.to_thread(awe_on_chain.is_valid_address, address)
+        text = text + " Click the button below to bind your Solana wallet."
 
-            if not is_valid:
-                await self.send_response({'text': f"Invalid address provided. Please check your input."}, update, context)
-            else:
-                await asyncio.to_thread(TGBotUserWallet.set_user_wallet_address, self.user_agent_id, user_id, address)
-                await self.send_response({'text': f"Your Solana wallet address is set to {address}"}, update, context)
+        keyboard = [
+            [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(text, reply_markup=reply_markup)
+
 
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.error("Exception while handling an update:", exc_info=context.error)

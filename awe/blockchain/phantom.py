@@ -50,7 +50,7 @@ def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: 
     redirect_link = urllib.parse.quote_plus(f"{server_host}/v1/tg-phantom-wallets/verify/{agent_id}/{tg_user_id}?wallet={wallet_address}&timestamp={timestamp}&signature={signature}")
 
     original_message = f"{timestamp}"
-    original_message_encoded = base58.b58encode(original_message).decode()
+    original_message_encoded = base58.b58encode(original_message.encode()).decode()
 
     plain_payload = json.dumps({
         "message": original_message_encoded,

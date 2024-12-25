@@ -160,7 +160,8 @@ def import_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
         with Session(engine) as session:
             for _ in range(num_agents_on_chain - num_agents_in_db):
                 user_agent = UserAgent(
-                    user_address=user_address
+                    user_address=user_address,
+                    agent_data=UserAgentData()
                 )
                 session.add(user_agent)
 
@@ -198,10 +199,8 @@ def reset_round_data(agent_id, user_address: Annotated[str, Depends(get_current_
         statement = select(UserAgentData).where(UserAgentData.user_agent_id == agent_id)
         agent_data = session.exec(statement).first()
 
-        if agent_data is None:
-            return UserAgentData(user_agent_id=agent_id)
-
         agent_data.awe_token_round_transferred = 0
+        agent_data.current_round = UserAgentData.current_round + 1
 
         session.add(agent_data)
         session.commit()

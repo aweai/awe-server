@@ -8,6 +8,7 @@ class UserAgentData(SQLModel, table=True):
     id: int | None = Field(primary_key=True, default=None)
     user_agent_id: int = Field(unique=True, nullable=False, foreign_key="useragent.id")
     awe_token_round_transferred: int = Field(default=0)
+    current_round: int = Field(default=1)
 
     awe_token_quote: int = Field(default=0)
     total_invocations: int = Field(default=0)

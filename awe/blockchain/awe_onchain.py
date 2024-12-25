@@ -38,6 +38,11 @@ class AweOnChain(ABC):
         # Check the validity of the wallet address
         pass
 
+    @abstractmethod
+    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> str:
+        # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
+        pass
+
     def token_ui_amount(self, amount: int) -> str:
         # Get the UI display for the given token amount
         int_part = int(int(amount) / int(1e9))

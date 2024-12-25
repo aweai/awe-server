@@ -9,7 +9,10 @@ import asyncio
 from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from ..models.tg_bot_user_wallet import TGBotUserWallet
-from awe.blockchain.phantom import get_connect_url
+from ..models.tg_user_deposit import TgUserDeposit
+from awe.blockchain.phantom import get_connect_url, get_deposit_url
+from awe.blockchain import awe_on_chain
+from typing import Optional
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -63,6 +66,7 @@ class TGBot:
             return
 
         user_id = str(update.effective_user.id)
+
         if user_id is None or user_id == "":
             await self.send_response("User ID not found", update, context)
             return
@@ -74,14 +78,65 @@ class TGBot:
         else:
             text = f"Your Solana wallet address is {address}. Click the button below to bind a new wallet."
 
-        text = text + ""
-
         keyboard = [
             [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(text, reply_markup=reply_markup)
+
+    async def check_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[TGBotUserWallet]:
+        if update.effective_user is None:
+            await self.send_response("User ID not found", update, context)
+            return None
+
+        user_id = str(update.effective_user.id)
+        if user_id is None or user_id == "":
+            await self.send_response("User ID not found", update, context)
+            return None
+
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
+
+        if user_wallet is None or user_wallet.address is None or user_wallet.address == "":
+            text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
+            keyboard = [
+                [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(text, reply_markup=reply_markup)
+            return None
+
+        return user_wallet
+
+    async def check_deposit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+
+        user_wallet = await self.check_wallet(update, context)
+        if user_wallet is None:
+            return False
+
+        user_id = str(update.effective_user.id)
+        tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round(self.user_agent_id, user_id))
+        if tg_user_deposit is None:
+
+            price = self.aweAgent.config.awe_token_config.user_price
+
+            # Check the user balance
+            user_balance = awe_on_chain.get_balance(user_wallet.address)
+            user_balance_int = int(user_balance / 1e9)
+            if user_balance_int < price:
+                await update.message.reply_text(f"You don't have enough AWE tokens in your wallet to deposit. Transfer {price} AWE to the wallet to begin.")
+                return False
+
+            # Send the deposit button
+            url = await asyncio.to_thread(get_deposit_url, self.user_agent_id, user_id, price, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
+            keyboard = [
+                [InlineKeyboardButton("Deposit", url=url)],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(f"Deposit {self.aweAgent.config.awe_token_config.user_price} AWE to start using this Memegent", reply_markup=reply_markup)
+            return False
+
+        return True
 
 
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -171,6 +226,12 @@ class TGBot:
             await asyncio.to_thread(self.update_group_chat_history, message, chat_id)
 
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        # Check user deposit
+        if not await self.check_deposit(update, context):
+            return
+
+        # Start chat
         if update.message.chat.type == constants.ChatType.PRIVATE:
             await self.respond_dm(update, context)
         elif update.message.chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:

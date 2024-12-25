@@ -179,3 +179,7 @@ class AweOnSolana(AweOnChain):
             return decoded.is_on_curve()
         except:
             return False
+
+    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> str:
+        # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
+        return ""

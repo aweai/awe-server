@@ -30,3 +30,8 @@ class AweOnDummy(AweOnChain):
     def get_user_approve_transaction(self, user_wallet: str, amount: int) -> bytes:
         # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
         return b""
+
+    def collect_user_payment(self, user_wallet: str, amount: int) -> str:
+        # Transfer tokens from the user wallet to the system wallet
+        # Return the transaction hash
+        return ""

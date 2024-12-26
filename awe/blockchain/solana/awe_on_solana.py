@@ -190,16 +190,11 @@ class AweOnSolana(AweOnChain):
             TOKEN_2022_PROGRAM_ID
         )
 
-        awe_delegate_public_key, _ = Pubkey.find_program_address(
-            [b"delegate"],
-            self.program_id
-        )
-
         params = spl_token.ApproveCheckedParams(
             program_id=TOKEN_2022_PROGRAM_ID,
             source=user_associated_token_account,
             mint=self.awe_mint_public_key,
-            delegate=awe_delegate_public_key,
+            delegate=self.system_payer.pubkey(),
             owner=user_wallet_pk,
             amount=int(amount * 1e9),
             decimals=9
@@ -212,3 +207,34 @@ class AweOnSolana(AweOnChain):
 
         tx = Transaction.new_unsigned(msg)
         return bytes(tx)
+
+
+    def collect_user_payment(self, user_wallet: str, amount: int):
+        # Transfer tokens from the user wallet to the system wallet
+        # Return the transaction hash
+
+        system_payer_associated_token_account = spl_token.get_associated_token_address(
+            self.system_payer.pubkey(),
+            self.awe_mint_public_key,
+            TOKEN_2022_PROGRAM_ID
+        )
+
+        user_wallet_pk = Pubkey.from_string(user_wallet)
+        user_associated_token_account = spl_token.get_associated_token_address(
+            user_wallet_pk,
+            self.awe_mint_public_key,
+            TOKEN_2022_PROGRAM_ID
+        )
+
+        send_tx_resp = self.token_client.transfer_checked(
+            source=user_associated_token_account,
+            dest=system_payer_associated_token_account,
+            owner=self.system_payer,
+            amount=int(amount * 1e9),
+            decimals=9,
+            opts=TxOpts(
+                skip_confirmation=False
+            )
+        )
+
+        return str(send_tx_resp)

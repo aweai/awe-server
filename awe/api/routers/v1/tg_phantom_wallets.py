@@ -1,14 +1,16 @@
 from typing import Annotated
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
+from awe.blockchain import awe_on_chain
 from awe.blockchain.phantom import decrypt_phantom_data, verify_system_signature, verify_signature
 from sqlmodel import Session, select
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, joinedload
 from awe.db import engine
 from awe.models.tg_phantom_used_nonce import TGPhantomUsedNonce
 from awe.models.tg_bot_user_wallet import TGBotUserWallet
 from awe.blockchain.phantom import get_wallet_verification_url
 from awe.models.user_agent import UserAgent
+from awe.models import TgUserDeposit, UserAgentData
 from solders.pubkey import Pubkey
 import json
 import logging
@@ -240,13 +242,66 @@ def handle_phantom_approve_callback(
     if 'signature' not in payload:
         return {"errorMessage": "Invalid response from Phantom"}
 
-    return {"signature": payload["signature"]}
+    # Now the user approved the transfer
+    # We transfer the tokens to the system account
+    # And add the balance for the agent account
+    try:
+        with Session(engine) as session:
+
+            # Get user wallet info from db
+            statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+            user_wallet = session.exec(statement).first()
+
+            # Get agent user price from db
+            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+            user_agent = session.exec(statement).first()
+
+            tg_bot_username = user_agent.tg_bot.username
+
+            # Collect user payment
+            amount = user_agent.awe_agent.awe_token_config.user_price
+            tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
+
+            # Record the transfer tx
+            user_deposit = TgUserDeposit(
+                user_agent_id=agent_id,
+                tg_user_id=tg_user_id,
+                user_agent_round=user_agent.agent_data.current_round,
+                address=user_wallet.address,
+                amount=amount,
+                tx_hash=tx
+            )
+
+            session.add(user_deposit)
+
+            # Add Memegent account balance
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
+
+            session.add(user_agent.agent_data)
+
+            session.commit()
+
+        # Display success message and redirect back to TG
+        html = notify_html_template.replace("__MESSAGE__", "Payment completed!<br/>You can now chat with the Memegent!")
+        html = html.replace("__REDIRECT_LINK__", f"https://t.me/{tg_bot_username}")
+        html = html.replace("__DEST_NAME__", "Telegram")
+        return HTMLResponse(html)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+        html = notify_html_template.replace("__MESSAGE__", "Payment not completed!<br/>Please go back to the Telegram and try again.")
+        html = html.replace("__REDIRECT_LINK__", f"https://t.me/{tg_bot_username}")
+        html = html.replace("__DEST_NAME__", "Telegram")
+        return HTMLResponse(html)
 
 
-def check_nonce(nonce) -> bool:
+def check_nonce(nonce: str | None) -> bool:
     # Check if nonce is already used
     # Race condition here
     # Not a big problem since there is only one person having the private key so concurrent requests are rare.
+    if nonce is None or nonce == "":
+        return False
+
     with Session(engine) as session:
         statement = select(TGPhantomUsedNonce).where(TGPhantomUsedNonce.nonce == nonce)
         used_nonce = session.exec(statement).first()

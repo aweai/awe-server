@@ -43,6 +43,12 @@ class AweOnChain(ABC):
         # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
         pass
 
+    @abstractmethod
+    def collect_user_payment(self, user_wallet: str, amount: int) -> str:
+        # Transfer tokens from the user wallet to the system wallet
+        # Return the transaction hash
+        pass
+
     def token_ui_amount(self, amount: int) -> str:
         # Get the UI display for the given token amount
         int_part = int(int(amount) / int(1e9))

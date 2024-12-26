@@ -21,14 +21,14 @@ if server_host == "":
 system_payer_private_key = os.getenv("SOLANA_SYSTEM_PAYER_PRIVATE_KEY", "")
 if system_payer_private_key == "":
     raise Exception("SOLANA_SYSTEM_PAYER_PRIVATE_KEY is not set")
-system_payer = Keypair.from_base58_string(system_payer_private_key)
 
+system_payer = Keypair.from_base58_string(system_payer_private_key)
+system_payer_x25519_public_key_str = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(bytes(system_payer.pubkey()))).decode()
+system_payer_x25519_private_key = PrivateKey(crypto_sign_ed25519_sk_to_curve25519(base58.b58decode(system_payer_private_key)))
 
 def get_connect_url(agent_id: int, tg_user_id: str) -> str:
 
     app_url = urllib.parse.quote_plus("https://aweai.fun")
-    ed25519_public_key_bytes = bytes(system_payer.pubkey())
-    x25519_public_key = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(ed25519_public_key_bytes)).decode()
 
     # Generate a signature from the server to prevent middleman attack
     timestamp = unix_timestamp_in_seconds()
@@ -38,11 +38,9 @@ def get_connect_url(agent_id: int, tg_user_id: str) -> str:
     redirect_link = urllib.parse.quote_plus(f"{server_host}/v1/tg-phantom-wallets/connect/{agent_id}/{tg_user_id}?timestamp={timestamp}&signature={signature}")
 
     cluster = os.getenv("SOLANA_NETWORK", "devnet")
-    return f"https://phantom.app/ul/v1/connect?app_url={app_url}&dapp_encryption_public_key={x25519_public_key}&redirect_link={redirect_link}&cluster={cluster}"
+    return f"https://phantom.app/ul/v1/connect?app_url={app_url}&dapp_encryption_public_key={system_payer_x25519_public_key_str}&redirect_link={redirect_link}&cluster={cluster}"
 
 def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
-    ed25519_public_key_bytes = bytes(system_payer.pubkey())
-    x25519_public_key = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(ed25519_public_key_bytes)).decode()
 
     transaction = awe_on_chain.get_user_approve_transaction(user_wallet, amount)
 
@@ -56,12 +54,9 @@ def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: st
     redirect_link = urllib.parse.quote_plus(f"{server_host}/v1/tg-phantom-wallets/approve/{agent_id}/{tg_user_id}")
     encrypted_payload, nonce = encrypt_phantom_data(phantom_encryption_public_key, plain_payload)
 
-    return f"https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key={x25519_public_key}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
+    return f"https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key={system_payer_x25519_public_key_str}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
 
 def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
-
-    ed25519_public_key_bytes = bytes(system_payer.pubkey())
-    x25519_public_key = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(ed25519_public_key_bytes)).decode()
 
     # Generate a signature from the server to prevent middleman attack
     timestamp = unix_timestamp_in_seconds()
@@ -80,7 +75,7 @@ def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: 
 
     encrypted_payload, nonce = encrypt_phantom_data(phantom_encryption_public_key, plain_payload)
 
-    return f"https://phantom.app/ul/v1/signMessage?dapp_encryption_public_key={x25519_public_key}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
+    return f"https://phantom.app/ul/v1/signMessage?dapp_encryption_public_key={system_payer_x25519_public_key_str}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
 
 
 def verify_system_signature(data_to_sign: str, timestamp: int, signature: str) -> Optional[str]:
@@ -99,15 +94,9 @@ def verify_signature(data_to_sign: str, pubkey: Pubkey, signature: str) -> Optio
     return None
 
 def encrypt_phantom_data(phantom_encryption_public_key: str, plain_data: str) -> Tuple[str, str]:
-    system_payer_private_key_bytes = base58.b58decode(system_payer_private_key)
 
-    x25519_private_key_bytes = crypto_sign_ed25519_sk_to_curve25519(system_payer_private_key_bytes)
-    x25519_private_key = PrivateKey(x25519_private_key_bytes)
+    data_box = get_databox(phantom_encryption_public_key)
 
-    phantom_public_key_bytes = base58.b58decode(phantom_encryption_public_key)
-    phantom_public_key = PublicKey(phantom_public_key_bytes)
-
-    data_box = Box(x25519_private_key, phantom_public_key)
     encrypted = data_box.encrypt(plain_data.encode())
     encrypted_ciphertext = base58.b58encode(encrypted.ciphertext).decode()
     nonce = base58.b58encode(encrypted.nonce).decode()
@@ -117,18 +106,16 @@ def encrypt_phantom_data(phantom_encryption_public_key: str, plain_data: str) ->
 
 def decrypt_phantom_data(phantom_encryption_public_key: str, nonce: str, encrypted_data: str) -> str:
 
-    system_payer_private_key_bytes = base58.b58decode(system_payer_private_key)
-
-    x25519_private_key_bytes = crypto_sign_ed25519_sk_to_curve25519(system_payer_private_key_bytes)
-    x25519_private_key = PrivateKey(x25519_private_key_bytes)
-
-    phantom_public_key_bytes = base58.b58decode(phantom_encryption_public_key)
-    phantom_public_key = PublicKey(phantom_public_key_bytes)
+    data_box = get_databox(phantom_encryption_public_key)
 
     nonce_bytes = base58.b58decode(nonce)
-
     data_bytes = base58.b58decode(encrypted_data)
 
-    data_box = Box(x25519_private_key, phantom_public_key)
     decrypted_data = data_box.decrypt(data_bytes, nonce_bytes)
+
     return decrypted_data.decode()
+
+def get_databox(phantom_encryption_public_key: str) -> Box:
+    phantom_public_key_bytes = base58.b58decode(phantom_encryption_public_key)
+    phantom_public_key = PublicKey(phantom_public_key_bytes)
+    return Box(system_payer_x25519_private_key, phantom_public_key)

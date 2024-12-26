@@ -134,10 +134,10 @@ class TGBot:
             # Send the deposit button
             url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
             keyboard = [
-                [InlineKeyboardButton(f"Pay {price}.00", url=url)],
+                [InlineKeyboardButton(f"Pay AWE {price}.00", url=url)],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(f"Pay {self.aweAgent.config.awe_token_config.user_price}.00 AWE to start using this Memegent", reply_markup=reply_markup)
+            await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)
             return False
 
         return True

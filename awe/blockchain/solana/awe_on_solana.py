@@ -208,7 +208,7 @@ class AweOnSolana(AweOnChain):
         ix = spl_token.approve_checked(params)
 
         recent_blockhash = self.http_client.get_latest_blockhash().value.blockhash
-        msg = Message.new_with_blockhash([ix], self.system_payer.pubkey(), recent_blockhash)
+        msg = Message.new_with_blockhash([ix], user_wallet_pk, recent_blockhash)
 
         tx = Transaction.new_unsigned(msg)
         return bytes(tx)

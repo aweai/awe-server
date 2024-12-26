@@ -232,8 +232,9 @@ class TGBot:
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Check user deposit
-        if not await self.check_deposit(update, context):
-            return
+        if self.aweAgent.config.awe_token_enabled:
+            if not await self.check_deposit(update, context):
+                return
 
         # Start chat
         if update.message.chat.type == constants.ChatType.PRIVATE:

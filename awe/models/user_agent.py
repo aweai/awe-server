@@ -39,7 +39,7 @@ class UserAgent(SQLModel, table=True):
 
         # Token Distribution
         if self.awe_agent.awe_token_enabled:
-            if self.awe_agent.awe_token_config is None or self.awe_agent.awe_token_config.max_token_per_round <= 0 or self.awe_agent.awe_token_config.max_token_per_tx <= 0:
+            if self.awe_agent.awe_token_config is None or self.awe_agent.awe_token_config.max_token_per_round <= 0 or self.awe_agent.awe_token_config.max_token_per_tx <= 0 or self.awe_agent.awe_token_config.user_price <= 0:
                 return "Token Distribution is not fully configured!"
 
         # Image Generation

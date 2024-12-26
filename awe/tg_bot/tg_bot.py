@@ -10,7 +10,7 @@ from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from ..models.tg_bot_user_wallet import TGBotUserWallet
 from ..models.tg_user_deposit import TgUserDeposit
-from awe.blockchain.phantom import get_connect_url, get_deposit_url
+from awe.blockchain.phantom import get_connect_url, get_approve_url
 from awe.blockchain import awe_on_chain
 from typing import Optional
 
@@ -71,12 +71,12 @@ class TGBot:
             await self.send_response("User ID not found", update, context)
             return
 
-        address = await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, user_id)
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
 
-        if address is None or address == "":
+        if user_wallet is None or user_wallet.address is None or user_wallet.address == "":
             text = "You didn't bind your Solana wallet yet. Click the button below to bind your Solana wallet."
         else:
-            text = f"Your Solana wallet address is {address}. Click the button below to bind a new wallet."
+            text = f"Your Solana wallet address is {user_wallet.address}. Click the button below to bind a new wallet."
 
         keyboard = [
             [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
@@ -115,25 +115,29 @@ class TGBot:
             return False
 
         user_id = str(update.effective_user.id)
-        tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round(self.user_agent_id, user_id))
+        tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round, self.user_agent_id, user_id)
         if tg_user_deposit is None:
-
+            self.logger.debug("User not paid.")
             price = self.aweAgent.config.awe_token_config.user_price
+            self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
 
             # Check the user balance
-            user_balance = awe_on_chain.get_balance(user_wallet.address)
+            user_balance = await asyncio.to_thread(awe_on_chain.get_balance, user_wallet.address)
             user_balance_int = int(user_balance / 1e9)
+
+            self.logger.debug(f"User balance: {user_balance_int}.00")
+
             if user_balance_int < price:
-                await update.message.reply_text(f"You don't have enough AWE tokens in your wallet to deposit. Transfer {price} AWE to the wallet to begin.")
+                await update.message.reply_text(f"You don't have enough AWE tokens to pay ({user_wallet.address}: {user_balance_int}.00). Transfer {price}.00 AWE to your wallet to begin.")
                 return False
 
             # Send the deposit button
-            url = await asyncio.to_thread(get_deposit_url, self.user_agent_id, user_id, price, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
+            url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
             keyboard = [
-                [InlineKeyboardButton("Deposit", url=url)],
+                [InlineKeyboardButton(f"Pay {price}.00", url=url)],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(f"Deposit {self.aweAgent.config.awe_token_config.user_price} AWE to start using this Memegent", reply_markup=reply_markup)
+            await update.message.reply_text(f"Pay {self.aweAgent.config.awe_token_config.user_price}.00 AWE to start using this Memegent", reply_markup=reply_markup)
             return False
 
         return True

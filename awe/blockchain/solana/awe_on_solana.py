@@ -180,6 +180,35 @@ class AweOnSolana(AweOnChain):
         except:
             return False
 
-    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> str:
-        # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
-        return ""
+    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> bytes:
+        # Construct a tx for the user to approve the system delegate account to transfer certain amount of tokens.
+        user_wallet_pk = Pubkey.from_string(user_wallet)
+
+        user_associated_token_account = spl_token.get_associated_token_address(
+            user_wallet_pk,
+            self.awe_mint_public_key,
+            TOKEN_2022_PROGRAM_ID
+        )
+
+        awe_delegate_public_key, _ = Pubkey.find_program_address(
+            [b"delegate"],
+            self.program_id
+        )
+
+        params = spl_token.ApproveCheckedParams(
+            program_id=TOKEN_2022_PROGRAM_ID,
+            source=user_associated_token_account,
+            mint=self.awe_mint_public_key,
+            delegate=awe_delegate_public_key,
+            owner=user_wallet_pk,
+            amount=int(amount * 1e9),
+            decimals=9
+        )
+
+        ix = spl_token.approve_checked(params)
+
+        recent_blockhash = self.http_client.get_latest_blockhash().value.blockhash
+        msg = Message.new_with_blockhash([ix], self.system_payer.pubkey(), recent_blockhash)
+
+        tx = Transaction.new_unsigned(msg)
+        return bytes(tx)

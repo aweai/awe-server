@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
-from awe.blockchain.phantom import decrypt_phantom_data, verify_signature
+from awe.blockchain.phantom import decrypt_phantom_data, verify_system_signature, verify_signature
 from sqlmodel import Session, select
 from sqlalchemy.orm import load_only
 from awe.db import engine
@@ -9,6 +9,7 @@ from awe.models.tg_phantom_used_nonce import TGPhantomUsedNonce
 from awe.models.tg_bot_user_wallet import TGBotUserWallet
 from awe.blockchain.phantom import get_wallet_verification_url
 from awe.models.user_agent import UserAgent
+from solders.pubkey import Pubkey
 import json
 import logging
 import traceback
@@ -36,14 +37,14 @@ notify_html_template = """
                 font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
             }
             .logo {
-                color: white;
-                font-size: 64px;
-                font-weight: 800;
-                text-align: center;
+                position: relative;
                 margin-top: 120px;
             }
-            .logo .w {
-                color: #45f882;
+            .logo img {
+                position: relative;
+                display: block;
+                width: 200px;
+                margin: 0 auto;
             }
             .content {
                 position: relative;
@@ -68,7 +69,9 @@ notify_html_template = """
         </style>
     </head>
     <body>
-        <div class="logo">A<span class="w">W</span>E</div>
+        <div class="logo">
+            <img src="https://aweai.fun/assets/logo-Dnl0k0yW.png" alt="Awe logo" />
+        </div>
         <div class="content">
             <div class="message">__MESSAGE__</div>
             <div class="jump">Automatically jump back to __DEST_NAME__ in a short while...</div>
@@ -101,22 +104,12 @@ def handle_phantom_connect_callback(
         return {"errorMessage": "Incomplete request from Phantom"}
 
     # Check signature and timestamp
-    err_msg = verify_signature(f"{agent_id}{tg_user_id}{timestamp}", timestamp, signature)
+    err_msg = verify_system_signature(f"{agent_id}{tg_user_id}{timestamp}", timestamp, signature)
     if err_msg is not None:
         return {"errorMessage": err_msg}
 
-    # Check if nonce is already used
-    # Race condition here
-    # Not a big problem since there is only one person having the private key so concurrent requests are rare.
-    with Session(engine) as session:
-        statement = select(TGPhantomUsedNonce).where(TGPhantomUsedNonce.nonce == nonce)
-        used_nonce = session.exec(statement).first()
-        if used_nonce is not None:
-            return {"errorMessage": "Nonce is already used"}
-
-        used_nonce = TGPhantomUsedNonce(nonce=nonce)
-        session.add(used_nonce)
-        session.commit()
+    if not check_nonce(nonce):
+        return {"errorMessage": "Nonce is already used"}
 
     # Decrypt the data
     # Public key ownership is not verified here
@@ -142,41 +135,24 @@ def handle_phantom_connect_callback(
         user_wallet.phantom_session = data_dict["session"]
         user_wallet.phantom_encryption_public_key = phantom_encryption_public_key
 
-        # Due to an unresolved bug the signMessage deeplink cannot be used right now.
-        # Let's just skip the wallet verification for now.
-        user_wallet.address = data_dict["public_key"]
-
         session.add(user_wallet)
         session.commit()
 
     # Redirect to Phantom again for wallet address verification
-    # url = get_wallet_verification_url(
-    #     agent_id,
-    #     tg_user_id,
-    #     data_dict["public_key"],
-    #     data_dict["session"],
-    #     phantom_encryption_public_key
-    # )
+    url = get_wallet_verification_url(
+        agent_id,
+        tg_user_id,
+        data_dict["public_key"],
+        data_dict["session"],
+        phantom_encryption_public_key
+    )
 
-    # logger.debug(f"Phantom verification url: {url}")
-
-    # # Display success message and redirect back to TG
-    # html = notify_html_template.replace("__MESSAGE__", "One more step.<br/>We still need to verify your ownership of the wallet.")
-    # html = html.replace("__REDIRECT_LINK__", url)
-    # html = html.replace("__DEST_NAME__", "Phantom")
-    # return HTMLResponse(html)
-
-    # Get the TG Bot username to jump back
-    with Session(engine) as session:
-        statement = select(UserAgent).options(load_only(UserAgent.tg_bot)).where(UserAgent.id == agent_id)
-        user_agent = session.exec(statement).first()
-        if user_agent is None or user_agent.tg_bot is None or user_agent.tg_bot.username == "":
-            return {"errorMessage": "Invalid agent"}
+    logger.debug(f"Phantom verification url: {url}")
 
     # Display success message and redirect back to TG
-    html = notify_html_template.replace("__MESSAGE__", "Your wallet has been bound successfully!")
-    html = html.replace("__REDIRECT_LINK__", f"https://t.me/{user_agent.tg_bot.username}")
-    html = html.replace("__DEST_NAME__", "Telegram")
+    html = notify_html_template.replace("__MESSAGE__", "One more step.<br/>We still need to verify your ownership of the wallet.")
+    html = html.replace("__REDIRECT_LINK__", url)
+    html = html.replace("__DEST_NAME__", "Phantom")
     return HTMLResponse(html)
 
 
@@ -196,48 +172,28 @@ def handle_phantom_verify_callback(
         return {"errorCode": error_code, "errorMessage": error_message}
 
     # Check signature and timestamp
-    err_msg = verify_signature(f"{agent_id}{tg_user_id}{wallet}{timestamp}", timestamp, signature)
+    err_msg = verify_system_signature(f"{agent_id}{tg_user_id}{wallet}{timestamp}", timestamp, signature)
     if err_msg is not None:
         return {"errorMessage": err_msg}
 
-    # Check if nonce is already used
-    # Race condition here
-    # Not a big problem since there is only one person having the private key so concurrent requests are rare.
-    with Session(engine) as session:
-        statement = select(TGPhantomUsedNonce).where(TGPhantomUsedNonce.nonce == nonce)
-        used_nonce = session.exec(statement).first()
-        if used_nonce is not None:
-            return {"errorMessage": "Nonce is already used"}
+    if not check_nonce(nonce):
+        return {"errorMessage": "Nonce is already used"}
 
-        used_nonce = TGPhantomUsedNonce(nonce=nonce)
-        session.add(used_nonce)
-        session.commit()
+    payload = decrypt_payload(agent_id, tg_user_id, nonce, data)
 
-    # Get phantom_encryption_public_key from database
-    with Session(engine) as session:
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
-        user_wallet = session.exec(statement).first()
-        if user_wallet is None:
-            return {"errorMessage": "User wallet not found"}
+    if 'errorMessage' in payload:
+        return payload
 
-    if user_wallet.phantom_encryption_public_key is None or user_wallet.phantom_encryption_public_key == "":
-        return {"errorMessage": "phantom_encryption_public_key not found"}
-
-    # Decrypt the payload
-    try:
-        decrypted_payload = decrypt_phantom_data(user_wallet.phantom_encryption_public_key, nonce, data)
-        decrypted_payload_dict = json.loads(decrypted_payload)
-    except Exception as e:
-        logger.error(e)
-        logger.error(traceback.format_exc())
-        return {"errorMessage": "Decryption failed for data returned from Phantom"}
-
-    if 'signature' not in decrypted_payload_dict:
+    if 'signature' not in payload:
         return {"errorMessage": "Invalid response from Phantom"}
 
-    err_message = verify_signature(f"{timestamp}", timestamp, decrypted_payload_dict["signature"])
+    payload_sig = payload["signature"]
+    logger.debug(f"signature from Phantom: {payload_sig}")
+
+    user_pubkey = Pubkey.from_string(wallet)
+    err_message = verify_signature(f"{timestamp}", user_pubkey, payload["signature"])
     if err_message is not None:
-        return {"errorMessage": "Invalid signature from Phantom payload"}
+        return {"errorMessage": f"Invalid signature from Phantom payload: {err_message}"}
 
     # Now the ownership of the wallet is verified. Save the wallet address in DB
     with Session(engine) as session:
@@ -259,3 +215,69 @@ def handle_phantom_verify_callback(
     html = html.replace("__REDIRECT_LINK__", f"https://t.me/{user_agent.tg_bot.username}")
     html = html.replace("__DEST_NAME__", "Telegram")
     return HTMLResponse(html)
+
+
+@router.get("/approve/{agent_id}/{tg_user_id}")
+def handle_phantom_approve_callback(
+    agent_id: int,
+    tg_user_id: str,
+    error_code: Annotated[str | None, Query(alias="errorCode")] = None,
+    error_message: Annotated[str | None, Query(alias="errorMessage")] = None,
+    nonce: str | None = None,
+    data: str | None = None
+):
+    if error_code is not None:
+        return {"errorCode": error_code, "errorMessage": error_message}
+
+    if not check_nonce(nonce):
+        return {"errorMessage": "Nonce is already used"}
+
+    payload = decrypt_payload(agent_id, tg_user_id, nonce, data)
+
+    if 'errorMessage' in payload:
+        return payload
+
+    if 'signature' not in payload:
+        return {"errorMessage": "Invalid response from Phantom"}
+
+    return {"signature": payload["signature"]}
+
+
+def check_nonce(nonce) -> bool:
+    # Check if nonce is already used
+    # Race condition here
+    # Not a big problem since there is only one person having the private key so concurrent requests are rare.
+    with Session(engine) as session:
+        statement = select(TGPhantomUsedNonce).where(TGPhantomUsedNonce.nonce == nonce)
+        used_nonce = session.exec(statement).first()
+        if used_nonce is not None:
+            return False
+
+        used_nonce = TGPhantomUsedNonce(nonce=nonce)
+        session.add(used_nonce)
+        session.commit()
+
+        return True
+
+def decrypt_payload(agent_id: int, tg_user_id: str, nonce: str, data: str) -> dict:
+
+    # Get phantom_encryption_public_key from database
+
+    with Session(engine) as session:
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        user_wallet = session.exec(statement).first()
+        if user_wallet is None:
+            return {"errorMessage": "User wallet not found"}
+
+    if user_wallet.phantom_encryption_public_key is None or user_wallet.phantom_encryption_public_key == "":
+        return {"errorMessage": "phantom_encryption_public_key not found"}
+
+    # Decrypt the payload
+
+    try:
+        decrypted_payload = decrypt_phantom_data(user_wallet.phantom_encryption_public_key, nonce, data)
+        return json.loads(decrypted_payload)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+        return {"errorMessage": "Phantom data decryption failed!"}

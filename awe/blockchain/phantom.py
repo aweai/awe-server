@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 from awe.models.utils import unix_timestamp_in_seconds
 from solders.keypair import Keypair
 from solders.signature import Signature
+from solders.pubkey import Pubkey
 from nacl.public import PrivateKey, PublicKey, Box
 from nacl.bindings.crypto_sign import crypto_sign_ed25519_pk_to_curve25519, crypto_sign_ed25519_sk_to_curve25519
 import base58
@@ -39,20 +40,20 @@ def get_connect_url(agent_id: int, tg_user_id: str) -> str:
     cluster = os.getenv("SOLANA_NETWORK", "devnet")
     return f"https://phantom.app/ul/v1/connect?app_url={app_url}&dapp_encryption_public_key={x25519_public_key}&redirect_link={redirect_link}&cluster={cluster}"
 
-def get_deposit_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
+def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
     ed25519_public_key_bytes = bytes(system_payer.pubkey())
     x25519_public_key = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(ed25519_public_key_bytes)).decode()
 
     transaction = awe_on_chain.get_user_approve_transaction(user_wallet, amount)
 
     plain_payload = json.dumps({
-        "transaction": base58.b58encode(transaction.encode()),
+        "transaction": base58.b58encode(transaction).decode(),
         "session": phantom_session
     })
 
     logger.debug(f"plain payload str: {plain_payload}")
 
-    redirect_link = urllib.parse.quote_plus(f"{server_host}/v1/tg-phantom-wallets/deposit/{agent_id}/{tg_user_id}")
+    redirect_link = urllib.parse.quote_plus(f"{server_host}/v1/tg-phantom-wallets/approve/{agent_id}/{tg_user_id}")
     encrypted_payload, nonce = encrypt_phantom_data(phantom_encryption_public_key, plain_payload)
 
     return f"https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key={x25519_public_key}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
@@ -77,31 +78,25 @@ def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: 
         "session": phantom_session
     })
 
-    logger.debug(f"plain payload str: {plain_payload}")
-
     encrypted_payload, nonce = encrypt_phantom_data(phantom_encryption_public_key, plain_payload)
-
-    logger.debug(f"encrypted payload: {encrypted_payload}")
-    logger.debug(f"nonce: {nonce}")
-
-    # Debug - try decrypting
-    decrypted = decrypt_phantom_data(phantom_encryption_public_key, nonce, encrypted_payload)
-    logger.debug(f"decrypted: {decrypted}")
 
     return f"https://phantom.app/ul/v1/signMessage?dapp_encryption_public_key={x25519_public_key}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
 
 
-def verify_signature(data_to_sign: str, timestamp: int, signature: str) -> Optional[str]:
+def verify_system_signature(data_to_sign: str, timestamp: int, signature: str) -> Optional[str]:
     current_timestamp = unix_timestamp_in_seconds()
     if current_timestamp - timestamp >= 180:
         return "Timestamp too old"
 
+    return verify_signature(data_to_sign, system_payer.pubkey(), signature)
+
+
+def verify_signature(data_to_sign: str, pubkey: Pubkey, signature: str) -> Optional[str]:
     sig = Signature.from_string(signature)
-    if not sig.verify(system_payer.pubkey(), data_to_sign.encode()):
+    if not sig.verify(pubkey, data_to_sign.encode()):
         return "Invalid signature"
 
     return None
-
 
 def encrypt_phantom_data(phantom_encryption_public_key: str, plain_data: str) -> Tuple[str, str]:
     system_payer_private_key_bytes = base58.b58decode(system_payer_private_key)

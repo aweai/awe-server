@@ -24,5 +24,9 @@ class TgUserDeposit(SQLModel, table=True):
                 TgUserDeposit.tg_user_id == tg_user_id,
                 TgUserDeposit.user_agent_round == UserAgentData.current_round
                 )
-            tg_user_deposit, _ = session.exec(statement).first()
+            result = session.exec(statement).first()
+            if result is None:
+                return None
+
+            tg_user_deposit, _ = result
             return tg_user_deposit

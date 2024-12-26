@@ -27,6 +27,6 @@ class AweOnDummy(AweOnChain):
         # Check the validity of the wallet address
         return True
 
-    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> str:
+    def get_user_approve_transaction(self, user_wallet: str, amount: int) -> bytes:
         # Construct a tx for the user to approve the system account to transfer certain amount of tokens.
-        return ""
+        return b""

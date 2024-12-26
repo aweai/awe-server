@@ -97,7 +97,11 @@ class TGBot:
 
         user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
 
-        if user_wallet is None or user_wallet.address is None or user_wallet.address == "":
+        if user_wallet is None \
+            or user_wallet.address is None or user_wallet.address == "" \
+            or user_wallet.phantom_session is None or user_wallet.phantom_session == "" \
+            or user_wallet.phantom_encryption_public_key is None or user_wallet.phantom_encryption_public_key == "":
+
             text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
             keyboard = [
                 [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],

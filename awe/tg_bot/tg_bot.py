@@ -85,7 +85,7 @@ class TGBot:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(text, reply_markup=reply_markup)
 
-    async def check_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[TGBotUserWallet]:
+    async def check_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> Optional[TGBotUserWallet]:
         if update.effective_user is None:
             await self.send_response("User ID not found", update, context)
             return None
@@ -102,46 +102,58 @@ class TGBot:
             or user_wallet.phantom_session is None or user_wallet.phantom_session == "" \
             or user_wallet.phantom_encryption_public_key is None or user_wallet.phantom_encryption_public_key == "":
 
-            text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
-            keyboard = [
-                [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(text, reply_markup=reply_markup)
+            if not is_group_chat:
+                text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
+                url = await asyncio.to_thread(get_connect_url, self.user_agent_id, user_id)
+                keyboard = [
+                    [InlineKeyboardButton("Phantom Wallet", url=url)],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(text, reply_markup=reply_markup)
+            else:
+                text = "Please DM me to bind your wallet first."
+                await update.message.reply_text(text)
+
             return None
 
         return user_wallet
 
-    async def check_deposit(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    async def check_deposit(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
 
-        user_wallet = await self.check_wallet(update, context)
+        user_wallet = await self.check_wallet(update, context, is_group_chat)
         if user_wallet is None:
             return False
 
         user_id = str(update.effective_user.id)
         tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round, self.user_agent_id, user_id)
         if tg_user_deposit is None:
+
             self.logger.debug("User not paid.")
-            price = self.aweAgent.config.awe_token_config.user_price
-            self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
 
-            # Check the user balance
-            user_balance = await asyncio.to_thread(awe_on_chain.get_balance, user_wallet.address)
-            user_balance_int = int(user_balance / 1e9)
+            if not is_group_chat:
+                price = self.aweAgent.config.awe_token_config.user_price
+                self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
 
-            self.logger.debug(f"User balance: {user_balance_int}.00")
+                # Check the user balance
+                user_balance = await asyncio.to_thread(awe_on_chain.get_balance, user_wallet.address)
+                user_balance_int = int(user_balance / 1e9)
 
-            if user_balance_int < price:
-                await update.message.reply_text(f"You don't have enough AWE tokens to pay ({user_wallet.address}: {user_balance_int}.00). Transfer {price}.00 AWE to your wallet to begin.")
-                return False
+                self.logger.debug(f"User balance: {user_balance_int}.00")
 
-            # Send the deposit button
-            url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
-            keyboard = [
-                [InlineKeyboardButton(f"Pay AWE {price}.00", url=url)],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)
+                if user_balance_int < price:
+                    await update.message.reply_text(f"You don't have enough AWE tokens to pay ({user_wallet.address}: {user_balance_int}.00). Transfer {price}.00 AWE to your wallet to begin.")
+                    return False
+
+                # Send the deposit button
+                url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
+                keyboard = [
+                    [InlineKeyboardButton(f"Pay AWE {price}.00", url=url)],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)
+            else:
+                await update.message.reply_text(f"Please DM me to pay first.")
+
             return False
 
         return True
@@ -234,16 +246,21 @@ class TGBot:
             await asyncio.to_thread(self.update_group_chat_history, message, chat_id)
 
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-        # Check user deposit
-        if self.aweAgent.config.awe_token_enabled:
-            if not await self.check_deposit(update, context):
-                return
-
-        # Start chat
         if update.message.chat.type == constants.ChatType.PRIVATE:
+            # Check user deposit
+            if self.aweAgent.config.awe_token_enabled:
+                if not await self.check_deposit(update, context, False):
+                    return
+
             await self.respond_dm(update, context)
+
         elif update.message.chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:
+
+            # Check user deposit
+            if self.aweAgent.config.awe_token_enabled:
+                if not await self.check_deposit(update, context, True):
+                    return
+
             await self.respond_group(update, context)
 
     async def send_response(self, resp: dict, update: Update, context: ContextTypes.DEFAULT_TYPE):

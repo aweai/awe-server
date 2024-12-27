@@ -35,3 +35,8 @@ class AweOnDummy(AweOnChain):
         # Transfer tokens from the user wallet to the system wallet
         # Return the transaction hash
         return ""
+
+    def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
+        # Wait for the confirmation of the given tx
+        # Or timeout
+        pass

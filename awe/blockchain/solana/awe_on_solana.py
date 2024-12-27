@@ -7,12 +7,13 @@ from solders.message import Message
 from solders.transaction import Transaction
 import os
 from solana.rpc.api import Client
-from solana.rpc.commitment import Confirmed
+from solana.rpc.commitment import Confirmed, Finalized
 from solana.rpc.types import TxOpts
 from spl.token.client import Token
 from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import logging
 import spl.token.instructions as spl_token
+import time
 
 SOLANA_NETWORK_ENDPOINTS = {
     "devnet": "https://api.devnet.solana.com",
@@ -213,6 +214,8 @@ class AweOnSolana(AweOnChain):
         # Transfer tokens from the user wallet to the system wallet
         # Return the transaction hash
 
+        self.logger.debug(f"collecting user payment: {user_wallet}: {amount}")
+
         system_payer_associated_token_account = spl_token.get_associated_token_address(
             self.system_payer.pubkey(),
             self.awe_mint_public_key,
@@ -226,6 +229,9 @@ class AweOnSolana(AweOnChain):
             TOKEN_2022_PROGRAM_ID
         )
 
+        self.logger.debug(f"source: {str(user_associated_token_account)}, dest: {str(system_payer_associated_token_account)}")
+        self.logger.debug(f"signer: {str(self.system_payer.pubkey())}")
+
         send_tx_resp = self.token_client.transfer_checked(
             source=user_associated_token_account,
             dest=system_payer_associated_token_account,
@@ -238,3 +244,28 @@ class AweOnSolana(AweOnChain):
         )
 
         return str(send_tx_resp)
+
+
+    def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
+        # Wait for the confirmation of the given tx
+        # Or timeout
+        count = 0
+        sig = Signature.from_string(tx_hash)
+        while(True):
+            try:
+                tx = self.http_client.get_transaction(tx_sig=sig, commitment=Finalized)
+                if tx.value is not None:
+                    self.logger.debug("Transaction confirmed")
+                    self.logger.debug(tx.to_json())
+                    return
+                else:
+                    self.logger.debug("Transaction not confirmed")
+            except Exception as e:
+                self.logger.error("Error getting confirmed tx")
+                self.logger.error(e)
+
+            count += 1
+            if count >= timeout:
+                raise Exception("Transaction timeout!")
+
+            time.sleep(1)

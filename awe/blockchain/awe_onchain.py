@@ -49,6 +49,12 @@ class AweOnChain(ABC):
         # Return the transaction hash
         pass
 
+    @abstractmethod
+    def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
+        # Wait for the confirmation of the given tx
+        # Or timeout
+        pass
+
     def token_ui_amount(self, amount: int) -> str:
         # Get the UI display for the given token amount
         int_part = int(int(amount) / int(1e9))

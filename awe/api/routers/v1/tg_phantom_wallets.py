@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from awe.blockchain import awe_on_chain
 from awe.blockchain.phantom import decrypt_phantom_data, verify_system_signature, verify_signature
@@ -15,6 +15,7 @@ from solders.pubkey import Pubkey
 import json
 import logging
 import traceback
+import asyncio
 
 logger = logging.getLogger("[Phantom Walllet API]")
 
@@ -218,11 +219,11 @@ def handle_phantom_verify_callback(
     html = html.replace("__DEST_NAME__", "Telegram")
     return HTMLResponse(html)
 
-
 @router.get("/approve/{agent_id}/{tg_user_id}")
 def handle_phantom_approve_callback(
     agent_id: int,
     tg_user_id: str,
+    background_tasks: BackgroundTasks,
     error_code: Annotated[str | None, Query(alias="errorCode")] = None,
     error_message: Annotated[str | None, Query(alias="errorMessage")] = None,
     nonce: str | None = None,
@@ -242,57 +243,20 @@ def handle_phantom_approve_callback(
     if 'signature' not in payload:
         return {"errorMessage": "Invalid response from Phantom"}
 
-    # Now the user approved the transfer
-    # We transfer the tokens to the system account
-    # And add the balance for the agent account
-    try:
-        with Session(engine) as session:
+    # Process the payment in the background
+    background_tasks.add_task(collect_user_fund, agent_id, tg_user_id, payload["signature"])
 
-            # Get user wallet info from db
-            statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
-            user_wallet = session.exec(statement).first()
+    # Get tg bot username
+    with Session(engine) as session:
+        statement = select(UserAgent).options(load_only(UserAgent.tg_bot)).where(UserAgent.id == agent_id)
+        user_agent = session.exec(statement).first()
+        tg_bot_username = user_agent.tg_bot.username
 
-            # Get agent user price from db
-            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-            user_agent = session.exec(statement).first()
-
-            tg_bot_username = user_agent.tg_bot.username
-
-            # Collect user payment
-            amount = user_agent.awe_agent.awe_token_config.user_price
-            tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
-
-            # Record the transfer tx
-            user_deposit = TgUserDeposit(
-                user_agent_id=agent_id,
-                tg_user_id=tg_user_id,
-                user_agent_round=user_agent.agent_data.current_round,
-                address=user_wallet.address,
-                amount=amount,
-                tx_hash=tx
-            )
-
-            session.add(user_deposit)
-
-            # Add Memegent account balance
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
-
-            session.add(user_agent.agent_data)
-
-            session.commit()
-
-        # Display success message and redirect back to TG
-        html = notify_html_template.replace("__MESSAGE__", "Payment completed!<br/>You can now chat with the Memegent!")
-        html = html.replace("__REDIRECT_LINK__", f"https://t.me/{tg_bot_username}")
-        html = html.replace("__DEST_NAME__", "Telegram")
-        return HTMLResponse(html)
-    except Exception as e:
-        logger.error(e)
-        logger.error(traceback.format_exc())
-        html = notify_html_template.replace("__MESSAGE__", "Payment not completed!<br/>Please go back to the Telegram and try again.")
-        html = html.replace("__REDIRECT_LINK__", f"https://t.me/{tg_bot_username}")
-        html = html.replace("__DEST_NAME__", "Telegram")
-        return HTMLResponse(html)
+    # Display message and redirect back to TG
+    html = notify_html_template.replace("__MESSAGE__", "Processing payment in the background!<br/>Should be completed in a minute!")
+    html = html.replace("__REDIRECT_LINK__", f"https://t.me/{tg_bot_username}")
+    html = html.replace("__DEST_NAME__", "Telegram")
+    return HTMLResponse(html)
 
 
 def check_nonce(nonce: str | None) -> bool:
@@ -336,3 +300,48 @@ def decrypt_payload(agent_id: int, tg_user_id: str, nonce: str, data: str) -> di
         logger.error(e)
         logger.error(traceback.format_exc())
         return {"errorMessage": "Phantom data decryption failed!"}
+
+
+async def collect_user_fund(
+    agent_id: int,
+    tg_user_id: str,
+    approve_tx: str,
+
+):
+    # Wait for the finalize of the approve tx before
+    await asyncio.sleep(30)
+
+    # Wait for the approve tx to be confirmed before next step
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
+
+    with Session(engine) as session:
+        # Get user wallet info from db
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        user_wallet = session.exec(statement).first()
+
+        # Get agent user price from db
+        statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+        user_agent = session.exec(statement).first()
+
+        # Collect user payment
+        amount = user_agent.awe_agent.awe_token_config.user_price
+        tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
+
+        # Record the transfer tx
+        user_deposit = TgUserDeposit(
+            user_agent_id=agent_id,
+            tg_user_id=tg_user_id,
+            user_agent_round=user_agent.agent_data.current_round,
+            address=user_wallet.address,
+            amount=amount,
+            tx_hash=tx
+        )
+
+        session.add(user_deposit)
+
+        # Add Memegent account balance
+        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
+
+        session.add(user_agent.agent_data)
+
+        session.commit()

@@ -184,19 +184,18 @@ class TGBot:
 
     async def respond_dm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        if update.effective_user is None:
-            await self.send_response("User ID not found", update, context)
-            return
+        # Check user deposit
+        if self.aweAgent.config.awe_token_enabled:
+            if not await self.check_deposit(update, context, False):
+                return
 
         user_id = str(update.effective_user.id)
-        if user_id is None or user_id == "":
-            await self.send_response("User ID not found", update, context)
-            return
 
         resp = await self.aweAgent.get_response(
             "[Private chat] " + update.message.text,
             user_id,
             user_id)
+
         await self.send_response(resp, update, context)
 
     async def respond_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -214,16 +213,12 @@ class TGBot:
         chat_id = f"{update.effective_chat.id}"
 
         if bot_mentioned:
-
-            if update.effective_user is None:
-                await self.send_response("User ID not found", update, context)
-                return
+            # Check user deposit
+            if self.aweAgent.config.awe_token_enabled:
+                if not await self.check_deposit(update, context, True):
+                    return
 
             user_id = str(update.effective_user.id)
-            if user_id is None or user_id == "":
-                await self.send_response("User ID not found", update, context)
-                return
-
             history_messages = await asyncio.to_thread(self.get_group_chat_history, chat_id)
 
             resp = await self.aweAgent.get_response(
@@ -247,20 +242,8 @@ class TGBot:
 
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message.chat.type == constants.ChatType.PRIVATE:
-            # Check user deposit
-            if self.aweAgent.config.awe_token_enabled:
-                if not await self.check_deposit(update, context, False):
-                    return
-
             await self.respond_dm(update, context)
-
         elif update.message.chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:
-
-            # Check user deposit
-            if self.aweAgent.config.awe_token_enabled:
-                if not await self.check_deposit(update, context, True):
-                    return
-
             await self.respond_group(update, context)
 
     async def send_response(self, resp: dict, update: Update, context: ContextTypes.DEFAULT_TYPE):

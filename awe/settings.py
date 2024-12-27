@@ -9,11 +9,11 @@ from solders.keypair import Keypair
 from dotenv import load_dotenv
 load_dotenv("persisted_data/.env")
 
-class LLMType(enum.Enum):
+class LLMType(str, enum.Enum):
     OpenAI = "openai"
     Local = "local"
 
-class SolanaNetwork(enum.Enum):
+class SolanaNetwork(str, enum.Enum):
     Devnet = "devnet"
     Testnet = "testnet"
     Mainnet = "mainnet-beta"

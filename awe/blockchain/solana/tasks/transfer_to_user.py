@@ -80,4 +80,4 @@ def transfer_to_user(user_wallet: str, amount: int):
         decimals=9
     )
 
-    return str(send_tx_resp)
+    return str(send_tx_resp.value)

@@ -33,5 +33,5 @@ More info on how to use the migration tool, [please read this doc](./migrations/
 ### Start the remote signing machine
 
 ```bash
-(venv) $ celery -A awe.blockchain.worker --loglevel=INFO --queues=tx_token_in,tx_token_out
+(venv) $ celery -A awe.blockchain.worker worker --loglevel=INFO --queues=tx_token_in,tx_token_out
 ```

@@ -56,4 +56,4 @@ def collect_user_fund(user_wallet: str, amount: int) -> str:
         )
     )
 
-    return str(send_tx_resp)
+    return str(send_tx_resp.value)

@@ -12,7 +12,7 @@ from PIL import Image
 import base64
 import random
 import logging
-from settings import settings
+from awe.settings import settings
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 
 logger = logging.getLogger("[Remote SD Tool]")

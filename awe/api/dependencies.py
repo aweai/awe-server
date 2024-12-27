@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from awe.db import engine
 from awe.models.user_agent import UserAgent
 from sqlalchemy import func
-from settings import settings
+from awe.settings import settings
 
 logger = logging.getLogger("[API Depends]")
 

@@ -1,25 +1,26 @@
 import urllib.parse
-import os
 from typing import Optional, Tuple
 from awe.models.utils import unix_timestamp_in_seconds
 from solders.signature import Signature
 from solders.pubkey import Pubkey
-from nacl.public import PrivateKey, PublicKey, Box
+from nacl.public import PublicKey, Box
 from nacl.signing import SigningKey, VerifyKey
-from nacl.bindings.crypto_sign import crypto_sign_ed25519_pk_to_curve25519, crypto_sign_ed25519_sk_to_curve25519
+from nacl.bindings import crypto_sign_ed25519_sk_to_seed
 import base58
 import logging
 import json
 from awe.blockchain import awe_on_chain
-from settings import settings
+from awe.settings import settings
 
 logger = logging.getLogger("[Phantom Wallet]")
 
-comm_ed25519_public_key = VerifyKey(bytes.fromhex(settings.comm_ed25519_public_key))
-comm_ed25519_private_key = SigningKey(bytes.fromhex(settings.comm_ed25519_private_key))
+comm_ed25519_seed = crypto_sign_ed25519_sk_to_seed(base58.b58decode(settings.comm_ed25519_private_key))
 
-comm_x25519_public_key_str = base58.b58encode(crypto_sign_ed25519_pk_to_curve25519(bytes.fromhex(settings.comm_ed25519_public_key))).decode()
-comm_x25519_private_key = PrivateKey(crypto_sign_ed25519_sk_to_curve25519(bytes.fromhex(settings.comm_ed25519_private_key)))
+comm_ed25519_public_key = VerifyKey(base58.b58decode(settings.comm_ed25519_public_key))
+comm_ed25519_private_key = SigningKey(comm_ed25519_seed)
+
+comm_x25519_public_key_str = base58.b58encode(bytes(comm_ed25519_public_key.to_curve25519_public_key())).decode()
+comm_x25519_private_key = comm_ed25519_private_key.to_curve25519_private_key()
 
 def get_connect_url(agent_id: int, tg_user_id: str) -> str:
 

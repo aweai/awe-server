@@ -1,4 +1,4 @@
-from settings import settings
+from awe.settings import settings
 from sqlmodel import create_engine
 import logging
 

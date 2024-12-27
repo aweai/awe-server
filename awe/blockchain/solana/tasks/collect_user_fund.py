@@ -8,7 +8,7 @@ from spl.token.client import Token
 from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import spl.token.instructions as spl_token
 
-from settings import settings
+from awe.settings import settings
 
 logger = logging.getLogger("[Collect User Fund Task]")
 

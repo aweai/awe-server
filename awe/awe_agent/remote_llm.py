@@ -5,7 +5,7 @@ import asyncio
 import logging
 from ..models.awe_agent import LLMConfig
 from ..celery import app
-from settings import settings
+from awe.settings import settings
 
 logger = logging.getLogger("[Remote LLM]")
 

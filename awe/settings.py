@@ -1,8 +1,10 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator, Field
+from pydantic import model_validator
 import logging
 import enum
 from typing import Optional
+from typing_extensions import Self
+from solders.keypair import Keypair
 
 from dotenv import load_dotenv
 load_dotenv("persisted_data/.env")
@@ -40,11 +42,11 @@ class AweSettings(BaseSettings):
     solana_awe_mint_address: str
     solana_awe_program_id: str
 
-    solana_system_payer_public_key: str
+    solana_system_payer_public_key: Optional[str] = None
 
     # Only provide this in the offline signing machine
     # to send blockchain transactions
-    solana_system_payer_private_key: Optional[str]
+    solana_system_payer_private_key: Optional[str] = None
 
     llm_type: LLMType = LLMType.Local
     agent_response_timeout: int = 100
@@ -63,13 +65,31 @@ class AweSettings(BaseSettings):
     comm_ed25519_private_key: str
 
     @model_validator(mode="after")
-    def openai_api_key_exist(self) -> str:
+    def openai_api_key_exist(self) -> Self:
         if self.llm_type == LLMType.OpenAI and self.openai_api_key == "":
             raise ValueError("openai_api_key must be provided")
+        return self
 
     @model_validator(mode="after")
-    def set_solana_network(self):
+    def set_solana_network(self) -> Self:
         self.solana_network_endpoint = solana_network_endpoints[self.solana_network]
+        return self
+
+    @model_validator(mode="after")
+    def check_system_payer_keys(self) -> Self:
+        if self.solana_system_payer_private_key is None and self.solana_system_payer_public_key is None:
+            raise ValueError("Either solana_system_payer_private_key or solana_system_payer_public_key must be set")
+
+        if self.solana_system_payer_private_key is not None:
+            kp = Keypair.from_base58_string(self.solana_system_payer_private_key)
+            pk = str(kp.pubkey())
+            print(f"System payer public key: {pk}")
+            if self.solana_system_payer_public_key is not None and self.solana_system_payer_public_key != pk:
+                raise ValueError("Mismatch solana_system_payer_private_key and solana_system_payer_public_key")
+            else:
+                self.solana_system_payer_public_key = pk
+
+        return self
 
 
 settings = AweSettings()

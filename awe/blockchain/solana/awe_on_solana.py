@@ -10,7 +10,7 @@ from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import logging
 import spl.token.instructions as spl_token
 import time
-from settings import settings
+from awe.settings import settings
 from awe.celery import app
 
 class AweOnSolana(AweOnChain):

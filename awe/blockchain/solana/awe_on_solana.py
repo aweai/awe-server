@@ -1,25 +1,17 @@
 from ..awe_onchain import AweOnChain
 from solders.signature import Signature
 from solders.pubkey import Pubkey
-from solders.keypair import Keypair
 from solders.rpc.responses import GetTokenAccountBalanceResp
 from solders.message import Message
 from solders.transaction import Transaction
-import os
 from solana.rpc.api import Client
 from solana.rpc.commitment import Confirmed, Finalized
-from solana.rpc.types import TxOpts
-from spl.token.client import Token
 from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import logging
 import spl.token.instructions as spl_token
 import time
-
-SOLANA_NETWORK_ENDPOINTS = {
-    "devnet": "https://api.devnet.solana.com",
-    "mainnet": "https://api.mainnet-beta.solana.com",
-    "testnet": "https://api.testnet.solana.com"
-}
+from settings import settings
+from awe.celery import app
 
 class AweOnSolana(AweOnChain):
 
@@ -28,38 +20,14 @@ class AweOnSolana(AweOnChain):
 
         self.logger = logging.getLogger("[Sol Client]")
 
-        network = os.getenv("SOLANA_NETWORK", "")
-        if network == "" or network not in SOLANA_NETWORK_ENDPOINTS.keys():
-            raise Exception("SOLANA_NETWORK is not specified correctly in env file")
+        self.program_id = Pubkey.from_string(settings.solana_awe_program_id)
+        self.awe_metadata_public_key = Pubkey.from_string(settings.solana_awe_metadata_address)
+        self.awe_mint_public_key = Pubkey.from_string(settings.solana_awe_mint_address)
+        self.system_payer_public_key = Pubkey.from_string(settings.solana_system_payer_public_key)
 
-        self.awe_metadata_address = os.getenv("SOLANA_AWE_METADATA_ADDRESS", "")
-        if self.awe_metadata_address == "":
-            raise Exception("SOLANA_AWE_METADATA_ADDRESS is not specified in env file")
+        self.logger.info(f"System payer: {str(self.system_payer_public_key)}")
 
-        self.awe_mint_address = os.getenv("SOLANA_AWE_MINT_ADDRESS", "")
-        if self.awe_mint_address == "":
-            raise Exception("SOLANA_AWE_MINT_ADDRESS is not specified in env file")
-
-        program_id_address = os.getenv("SOLANA_AWE_PROGRAM_ID", "")
-        if program_id_address == "":
-            raise Exception("SOLANA_AWE_PROGRAM_ID is not specified in env file")
-
-        system_payer_private_key = os.getenv("SOLANA_SYSTEM_PAYER_PRIVATE_KEY", "")
-        if system_payer_private_key == "":
-            raise Exception("SOLANA_SYSTEM_PAYER_PRIVATE_KEY is not specified in env file")
-
-        self.program_id = Pubkey.from_string(program_id_address)
-        self.awe_metadata_public_key = Pubkey.from_string(self.awe_metadata_address)
-        self.awe_mint_public_key = Pubkey.from_string(self.awe_mint_address)
-        self.system_payer = Keypair.from_base58_string(system_payer_private_key)
-        self.logger.info(f"System payer: {str(self.system_payer.pubkey())}")
-        self.http_client = Client(SOLANA_NETWORK_ENDPOINTS[network])
-        self.token_client = Token(
-            self.http_client,
-            self.awe_mint_public_key,
-            TOKEN_2022_PROGRAM_ID,
-            self.system_payer
-        )
+        self.http_client = Client(settings.solana_network_endpoint)
 
 
     def get_user_num_agents(self, address: str) -> int:
@@ -93,58 +61,15 @@ class AweOnSolana(AweOnChain):
         return None
 
 
-    def transfer_token(self, dest_owner_address: str, amount: int) -> str:
+    def transfer_to_user(self, dest_owner_address: str, amount: int) -> str:
         # Transfer AWE from the system account to the given wallet address
         # Return the tx address
-
-        dest_owner_pubkey = Pubkey.from_string(dest_owner_address)
-
-        dest_associated_token_account_pubkey = spl_token.get_associated_token_address(
-            dest_owner_pubkey,
-            self.awe_mint_public_key,
-            TOKEN_2022_PROGRAM_ID
+        task = app.send_task(
+            name='awe.blockchain.tasks.transfer_to_user.transfer_to_user',
+            args=(dest_owner_address, amount)
         )
-
-
-        resp = self.token_client.get_balance(
-            dest_associated_token_account_pubkey,
-            Confirmed
-        )
-
-        if not isinstance(resp, GetTokenAccountBalanceResp):
-            # Token account not exist
-            # We have to create it for the user
-            # Some SOL will be spent
-
-            ix = spl_token.create_associated_token_account(
-                payer=self.system_payer.pubkey(),
-                owner=dest_owner_pubkey,
-                mint=self.awe_mint_public_key,
-                token_program_id=TOKEN_2022_PROGRAM_ID
-            )
-
-            recent_blockhash = self.http_client.get_latest_blockhash().value.blockhash
-            msg = Message.new_with_blockhash([ix], self.system_payer.pubkey(), recent_blockhash)
-
-            txn = Transaction([self.system_payer], msg, recent_blockhash)
-            tx_opts = TxOpts(skip_confirmation=False)
-            self.http_client.send_transaction(txn, opts=tx_opts)
-
-        source_associated_token_account_pubkey = spl_token.get_associated_token_address(
-            self.system_payer.pubkey(),
-            self.awe_mint_public_key,
-            TOKEN_2022_PROGRAM_ID
-        )
-
-        send_tx_resp = self.token_client.transfer_checked(
-            source=source_associated_token_account_pubkey,
-            dest=dest_associated_token_account_pubkey,
-            owner=self.system_payer,
-            amount=amount,
-            decimals=9
-        )
-
-        return send_tx_resp.to_json()
+        self.logger.info("Sent transfer to user task to the queue")
+        return task.get()
 
 
     def get_balance(self, owner_address: str) -> int:
@@ -158,7 +83,7 @@ class AweOnSolana(AweOnChain):
             TOKEN_2022_PROGRAM_ID
         )
 
-        resp = self.token_client.get_balance(
+        resp = self.http_client.get_token_account_balance(
             associated_token_account_pubkey,
             Confirmed
         )
@@ -172,7 +97,7 @@ class AweOnSolana(AweOnChain):
 
     def get_system_payer(self) -> str:
         # Get the address of the system account
-        return str(self.system_payer.pubkey())
+        return settings.solana_system_payer_public_key
 
     def is_valid_address(self, address: str) -> bool:
         try:
@@ -195,7 +120,7 @@ class AweOnSolana(AweOnChain):
             program_id=TOKEN_2022_PROGRAM_ID,
             source=user_associated_token_account,
             mint=self.awe_mint_public_key,
-            delegate=self.system_payer.pubkey(),
+            delegate=self.system_payer_public_key,
             owner=user_wallet_pk,
             amount=int(amount * 1e9),
             decimals=9
@@ -210,40 +135,16 @@ class AweOnSolana(AweOnChain):
         return bytes(tx)
 
 
-    def collect_user_payment(self, user_wallet: str, amount: int):
+    def collect_user_payment(self, user_wallet: str, amount: int) -> str:
         # Transfer tokens from the user wallet to the system wallet
         # Return the transaction hash
-
-        self.logger.debug(f"collecting user payment: {user_wallet}: {amount}")
-
-        system_payer_associated_token_account = spl_token.get_associated_token_address(
-            self.system_payer.pubkey(),
-            self.awe_mint_public_key,
-            TOKEN_2022_PROGRAM_ID
+        task = app.send_task(
+            name='awe.blockchain.tasks.collect_user_fund.collect_user_fund',
+            args=(user_wallet, amount),
+            countdown=10
         )
-
-        user_wallet_pk = Pubkey.from_string(user_wallet)
-        user_associated_token_account = spl_token.get_associated_token_address(
-            user_wallet_pk,
-            self.awe_mint_public_key,
-            TOKEN_2022_PROGRAM_ID
-        )
-
-        self.logger.debug(f"source: {str(user_associated_token_account)}, dest: {str(system_payer_associated_token_account)}")
-        self.logger.debug(f"signer: {str(self.system_payer.pubkey())}")
-
-        send_tx_resp = self.token_client.transfer_checked(
-            source=user_associated_token_account,
-            dest=system_payer_associated_token_account,
-            owner=self.system_payer,
-            amount=int(amount * 1e9),
-            decimals=9,
-            opts=TxOpts(
-                skip_confirmation=False
-            )
-        )
-
-        return str(send_tx_resp)
+        self.logger.info("Sent collect user payment task to the queue")
+        return task.get()
 
 
     def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):

@@ -9,7 +9,7 @@ class AweOnDummy(AweOnChain):
         # Return None if validation failed
         return "0xEDa8747bfe3396Aa37c937faF5BB97952cEf3bf2"
 
-    def transfer_token(self, dest_owner_address: str, amount: int) -> str:
+    def transfer_to_user(self, dest_owner_address: str, amount: int) -> str:
         # Transfer AWE from the system account to the given wallet address
         # Return the tx address
         return ""

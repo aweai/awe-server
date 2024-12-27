@@ -5,14 +5,14 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import asyncio
-from ..celery import app
+from ...celery import app
 import logging
 from io import BytesIO
 from PIL import Image
 import base64
 import random
 import logging
-import os
+from settings import settings
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 
 logger = logging.getLogger("[Remote SD Tool]")
@@ -42,11 +42,9 @@ class RemoteSDTool(BaseTool):
         UserAgentStatsInvocations.add_invocation(self.user_agent_id, tg_user_id, AITools.SD)
 
         resp = ""
-        timeout = os.getenv("SD_TASK_TIMEOUT", 60)
-        timeout = int(timeout)
 
         try:
-            resp = task.get(timeout=timeout)
+            resp = task.get(timeout=settings.sd_task_timeout)
         except Exception as e:
             logger.error(e)
 

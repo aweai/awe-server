@@ -23,9 +23,15 @@ More info on how to use the migration tool, [please read this doc](./migrations/
 (venv) $ python run.py
 ```
 
-### Start the workers
+### Start the AI task workers
 
 ```bash
 (venv) $ celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=llm --pool=solo
 (venv) $ celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=sd --pool=solo
+```
+
+### Start the remote signing machine
+
+```bash
+(venv) $ celery -A awe.blockchain.worker --loglevel=INFO --queues=tx_token_in,tx_token_out
 ```

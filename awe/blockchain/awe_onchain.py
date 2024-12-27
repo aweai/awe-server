@@ -17,7 +17,7 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def transfer_token(self, dest_owner_address: str, amount: int) -> str:
+    def transfer_to_user(self, dest_owner_address: str, amount: int) -> str:
         # Transfer AWE from the system account to the given wallet address
         # Return the tx address
         pass

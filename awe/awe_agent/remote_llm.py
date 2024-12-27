@@ -4,8 +4,8 @@ from typing import Optional, List, Mapping, Any
 import asyncio
 import logging
 from ..models.awe_agent import LLMConfig
-from .celery import app
-import os
+from ..celery import app
+from settings import settings
 
 logger = logging.getLogger("[Remote LLM]")
 
@@ -26,10 +26,9 @@ class RemoteLLM(LLM):
         logger.info("Sent remote llm task to the queue")
 
         resp = ""
-        timeout = int(os.getenv("LLM_TASK_TIMEOUT", 60))
 
         try:
-            resp = task.get(timeout=timeout)
+            resp = task.get(timeout=settings.llm_task_timeout)
         except Exception as e:
             logger.error(e)
             raise e

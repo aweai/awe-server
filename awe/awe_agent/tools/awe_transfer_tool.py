@@ -22,7 +22,7 @@ class AweTransferTool(AweTokenTool):
     def run_until_complete(self, tg_user_id: str, address: str, amount: int) -> str:
         amount = int(amount)
         amount_full = int(int(amount) * int(1e9))
-        awe_on_chain.transfer_token(address, amount_full)
+        awe_on_chain.transfer_to_user(address, amount_full)
 
         # Log the transfer
         UserAgentStatsTokenTransfers.add_invocation(self.user_agent_id, tg_user_id, address, amount)

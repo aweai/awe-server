@@ -1,4 +1,4 @@
-from ..celery import app
+from ...celery import app
 from sd_task.task_runner import run_inference_task
 from sd_task.task_args import InferenceTaskArgs
 from sd_task.config import Config

@@ -7,11 +7,11 @@ import json
 from time import time
 import logging
 import traceback
-import os
 from sqlmodel import Session, select
 from awe.db import engine
 from awe.models.user_agent import UserAgent
 from sqlalchemy import func
+from settings import settings
 
 logger = logging.getLogger("[API Depends]")
 
@@ -24,12 +24,7 @@ def get_admin(credentials: Annotated[HTTPAuthorizationCredentials, Depends(secur
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    admin_token = os.getenv("ADMIN_TOKEN", "")
-
-    if admin_token == "":
-        raise Exception("Admin token is not set")
-
-    if admin_token != credentials.credentials:
+    if settings.admin_token != credentials.credentials:
         exception.detail = "Admin auth failed"
         raise exception
 

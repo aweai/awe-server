@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from awe.blockchain import awe_on_chain
-from awe.blockchain.phantom import decrypt_phantom_data, verify_system_signature, verify_signature
+from awe.blockchain.phantom import decrypt_phantom_data, verify_comm_signature, verify_solana_signature
 from sqlmodel import Session, select
 from sqlalchemy.orm import load_only, joinedload
 from awe.db import engine
@@ -107,7 +107,7 @@ def handle_phantom_connect_callback(
         return {"errorMessage": "Incomplete request from Phantom"}
 
     # Check signature and timestamp
-    err_msg = verify_system_signature(f"{agent_id}{tg_user_id}{timestamp}", timestamp, signature)
+    err_msg = verify_comm_signature(f"{agent_id}{tg_user_id}{timestamp}", timestamp, signature)
     if err_msg is not None:
         return {"errorMessage": err_msg}
 
@@ -175,7 +175,7 @@ def handle_phantom_verify_callback(
         return {"errorCode": error_code, "errorMessage": error_message}
 
     # Check signature and timestamp
-    err_msg = verify_system_signature(f"{agent_id}{tg_user_id}{wallet}{timestamp}", timestamp, signature)
+    err_msg = verify_comm_signature(f"{agent_id}{tg_user_id}{wallet}{timestamp}", timestamp, signature)
     if err_msg is not None:
         return {"errorMessage": err_msg}
 
@@ -194,7 +194,7 @@ def handle_phantom_verify_callback(
     logger.debug(f"signature from Phantom: {payload_sig}")
 
     user_pubkey = Pubkey.from_string(wallet)
-    err_message = verify_signature(f"{timestamp}", user_pubkey, payload["signature"])
+    err_message = verify_solana_signature(f"{timestamp}", user_pubkey, payload["signature"])
     if err_message is not None:
         return {"errorMessage": f"Invalid signature from Phantom payload: {err_message}"}
 
@@ -306,42 +306,45 @@ async def collect_user_fund(
     agent_id: int,
     tg_user_id: str,
     approve_tx: str,
-
 ):
     # Wait for the finalize of the approve tx before
     await asyncio.sleep(30)
 
-    # Wait for the approve tx to be confirmed before next step
-    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
+    try:
+        # Wait for the approve tx to be confirmed before next step
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
 
-    with Session(engine) as session:
-        # Get user wallet info from db
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
-        user_wallet = session.exec(statement).first()
+        with Session(engine) as session:
+            # Get user wallet info from db
+            statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+            user_wallet = session.exec(statement).first()
 
-        # Get agent user price from db
-        statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-        user_agent = session.exec(statement).first()
+            # Get agent user price from db
+            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+            user_agent = session.exec(statement).first()
 
-        # Collect user payment
-        amount = user_agent.awe_agent.awe_token_config.user_price
-        tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
+            # Collect user payment
+            amount = user_agent.awe_agent.awe_token_config.user_price
+            tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
 
-        # Record the transfer tx
-        user_deposit = TgUserDeposit(
-            user_agent_id=agent_id,
-            tg_user_id=tg_user_id,
-            user_agent_round=user_agent.agent_data.current_round,
-            address=user_wallet.address,
-            amount=amount,
-            tx_hash=tx
-        )
+            # Record the transfer tx
+            user_deposit = TgUserDeposit(
+                user_agent_id=agent_id,
+                tg_user_id=tg_user_id,
+                user_agent_round=user_agent.agent_data.current_round,
+                address=user_wallet.address,
+                amount=amount,
+                tx_hash=tx
+            )
 
-        session.add(user_deposit)
+            session.add(user_deposit)
 
-        # Add Memegent account balance
-        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
+            # Add Memegent account balance
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
 
-        session.add(user_agent.agent_data)
+            session.add(user_agent.agent_data)
 
-        session.commit()
+            session.commit()
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())

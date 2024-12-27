@@ -1,4 +1,4 @@
-from ..celery import app
+from ...celery import app
 from typing import Optional, List
 from transformers import MistralForCausalLM, LlamaTokenizerFast, AutoModelForCausalLM, AutoTokenizer
 import torch

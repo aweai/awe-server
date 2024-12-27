@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from langchain.callbacks.base import AsyncCallbackHandler
 from typing import Dict, Any, List, Optional
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
+from awe.settings import settings, LLMType
 import asyncio
 
 import logging
@@ -16,19 +17,6 @@ import traceback
 import os
 
 logger = logging.getLogger("[Awe Agent]")
-
-supported_llm = ["local", "openai"]
-
-llm_type = os.getenv("LLM", "")
-
-if llm_type not in supported_llm:
-    raise Exception("LLM type is not configured!")
-
-if llm_type == "openai":
-    key = os.getenv("OPENAI_API_KEY", "")
-    if key == "":
-        raise Exception("OpenAI API Key is not configured!")
-
 
 class LLMInvocationLogHandler(AsyncCallbackHandler):
     """Async callback handler that can be used to handle callbacks from langchain."""
@@ -95,26 +83,20 @@ class AweAgent:
 
         llm_log_handler = LLMInvocationLogHandler(user_agent_id)
 
-        verbose_output = os.getenv("LOG_LEVEL", "") == "DEBUG"
+        verbose_output = settings.log_level == "DEBUG"
 
-        if llm_type == "local":
+        if settings.llm_type == LLMType.Local:
             llm = RemoteLLM(
                 llm_config=config.llm_config,
                 callbacks=[llm_log_handler]
             )
-        elif llm_type == "openai":
-            model = os.getenv("OPENAI_MODEL", "gpt-4o")
-            temp = float(os.getenv("OPENAI_TEMPERATURE", 0.7))
-            max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", 300))
-            max_retries = int(os.getenv("OPENAI_MAX_RETRIES", 2))
-            timeout = int(os.getenv("LLM_TASK_TIMEOUT", 60))
-
+        elif settings.llm_type == LLMType.OpenAI:
             llm = ChatOpenAI(
-                model=model,
-                temperature=temp,
-                max_tokens=max_tokens,
-                timeout=timeout,
-                max_retries=max_retries,
+                model=settings.openai_model,
+                temperature=settings.openai_temperature,
+                max_tokens=settings.openai_max_tokens,
+                timeout=settings.llm_task_timeout,
+                max_retries=settings.openai_max_retries,
                 callbacks=[llm_log_handler],
                 verbose=verbose_output,
                 disable_streaming=True
@@ -141,17 +123,12 @@ class AweAgent:
             template_tool_response="{observation}"
         )
 
-        timeout = os.getenv("AGENT_RESPONSE_TIMEOUT", 100)
-        timeout = int(timeout)
-
-        handle_parsing_errors = int(os.getenv("AGENT_HANDLE_PARSING_ERRORS", 1)) == 1
-
         self.agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
             verbose=verbose_output,
-            handle_parsing_errors=handle_parsing_errors,
-            max_execution_time=timeout,
+            handle_parsing_errors=settings.agent_handle_parsing_errors,
+            max_execution_time=settings.agent_response_timeout,
             max_iterations=5
         )
 

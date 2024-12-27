@@ -14,13 +14,18 @@ class AweTransferTool(AweTokenTool):
     name: str = "TransferAweToken"
     description: str =  (
         "Useful for when you need to transfer the AWE tokens to user."
-        "Input: an integer wrapped as string, representing the amount of tokens you want to transfer to the user."
+        "Input: an integer wrapped as string, no decimal part, representing the amount of tokens you want to transfer to the user."
         "Output: the number of tokens transferred to the user"
     )
     return_direct: bool = True
 
     def run_until_complete(self, tg_user_id: str, address: str, amount: int) -> str:
-        amount = int(amount)
+
+        try:
+            amount = int(amount)
+        except:
+            return "Invalid amount provided to the tool. Please try again..."
+
         amount_full = int(int(amount) * int(1e9))
         awe_on_chain.transfer_to_user(address, amount_full)
 
@@ -54,7 +59,7 @@ class AweTransferTool(AweTokenTool):
         wallet_address = await self.get_tg_user_address(run_manager)
 
         if wallet_address == "":
-            return "You didn't set your Solana wallet address to receive tokens. Please DM me with /wallet {address} command to set your wallet address."
+            return "You didn't set your Solana wallet address to receive tokens. Please DM me with /wallet command to set your wallet address."
 
         awe_balance_ui = await asyncio.to_thread(self.run_until_complete, tg_user_id, wallet_address, amount)
 

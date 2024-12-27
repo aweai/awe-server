@@ -19,7 +19,10 @@ class AweTokenTool(BaseTool):
 
     async def get_tg_user_address(self, run_manager: Optional[AsyncCallbackManagerForToolRun]) -> str:
         tg_user_id = self.get_tg_user_id(run_manager)
-        return await asyncio.to_thread(TGBotUserWallet.get_user_wallet_address, self.user_agent_id, tg_user_id)
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, tg_user_id)
+        if user_wallet is None or user_wallet.address is None:
+            return ""
+        return user_wallet.address
 
     async def get_agent_data(self) -> Optional[UserAgentData]:
         return await asyncio.to_thread(UserAgentData.get_user_agent_data_by_id, self.user_agent_id)

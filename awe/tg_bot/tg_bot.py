@@ -147,11 +147,15 @@ class TGBot:
                 # Send the deposit button
                 keyboard = []
 
-                if user_wallet.phantom_encryption_public_key != "" and user_wallet.phantom_session != "":
+                if user_wallet.phantom_encryption_public_key is not None \
+                    and user_wallet.phantom_encryption_public_key!= "" \
+                    and user_wallet.phantom_session is not None \
+                    and user_wallet.phantom_session != "":
+
                     url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
                     keyboard.append([InlineKeyboardButton(f"Phantom Mobile", url=url)])
 
-                keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=get_browser_approve_url(self.user_agent_id, user_id, user_wallet.address, price))])
+                keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=get_browser_approve_url(self.user_agent_id, user_id, user_wallet.address, price, self.tg_bot_config.username))])
 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)

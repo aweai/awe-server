@@ -5,6 +5,7 @@ from solders.pubkey import Pubkey
 from sqlmodel import Session, select
 from awe.db import engine
 from awe.models import TGBotUserWallet
+from .tg_phantom_wallets import collect_user_fund
 
 logger = logging.getLogger("[Wallet API]")
 
@@ -58,6 +59,8 @@ def handle_bind_wallet(agent_id: int, tg_user_id: str, wallet_address: str, time
         session.commit()
 
 
-@router.post("/approve/{agent_id}/{tg_user_id}/{wallet_address}")
-def handle_approve():
-    pass
+@router.post("/approve/{agent_id}/{tg_user_id}")
+def handle_approve(agent_id: int, tg_user_id: str, signature: str, background_tasks: BackgroundTasks):
+
+    # Process the payment in the background
+    background_tasks.add_task(collect_user_fund, agent_id, tg_user_id, signature)

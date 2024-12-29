@@ -34,7 +34,7 @@ def get_connect_url(agent_id: int, tg_user_id: str) -> str:
 
     return f"https://phantom.app/ul/v1/connect?app_url={app_url}&dapp_encryption_public_key={comm_x25519_public_key_str}&redirect_link={redirect_link}&cluster={settings.solana_network}"
 
-def get_browser_connect_url(agent_id: int, tg_user_id: str, tg_bot_username) -> str:
+def get_browser_connect_url(agent_id: int, tg_user_id: str, tg_bot_username: str) -> str:
     # Generate a signature from the server to prevent middleman attack
     timestamp = unix_timestamp_in_seconds()
     signature = sign_comm_message(f"{agent_id}{tg_user_id}{timestamp}")
@@ -57,8 +57,8 @@ def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: st
 
     return f"https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key={comm_x25519_public_key_str}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
 
-def get_browser_approve_url(agent_id: int, tg_user_id: str, user_wallet: str, amount: int):
-    return f"{settings.webui_host}/callback/user-wallets/approve/{agent_id}/{tg_user_id}/{user_wallet}?amount={amount}"
+def get_browser_approve_url(agent_id: int, tg_user_id: str, user_wallet: str, amount: int, tg_bot_username: str):
+    return f"{settings.webui_host}/callback/user-wallets/approve/{agent_id}/{tg_user_id}/{user_wallet}?amount={amount}&tg_bot={tg_bot_username}"
 
 def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
 

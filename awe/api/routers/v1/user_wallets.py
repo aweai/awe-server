@@ -49,6 +49,11 @@ def handle_bind_wallet(agent_id: int, tg_user_id: str, wallet_address: str, time
 
         user_wallet.address = wallet_address
 
+        # This is from the browser wallets
+        # Clear the phantom mobile wallet session
+        user_wallet.phantom_encryption_public_key = ""
+        user_wallet.phantom_session = ""
+
         session.add(user_wallet)
         session.commit()
 

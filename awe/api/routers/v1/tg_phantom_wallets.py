@@ -17,7 +17,7 @@ import logging
 import traceback
 import asyncio
 
-logger = logging.getLogger("[Phantom Walllet API]")
+logger = logging.getLogger("[Phantom Wallet API]")
 
 router = APIRouter(
     prefix="/v1/tg-phantom-wallets"

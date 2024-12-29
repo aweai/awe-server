@@ -10,7 +10,7 @@ from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from ..models.tg_bot_user_wallet import TGBotUserWallet
 from ..models.tg_user_deposit import TgUserDeposit
-from awe.blockchain.phantom import get_connect_url, get_approve_url
+from awe.blockchain.phantom import get_connect_url, get_approve_url, get_browser_connect_url, get_browser_approve_url
 from awe.blockchain import awe_on_chain
 from typing import Optional
 
@@ -79,7 +79,8 @@ class TGBot:
             text = f"Your Solana wallet address is {user_wallet.address}. Click the button below to bind a new wallet."
 
         keyboard = [
-            [InlineKeyboardButton("Phantom Wallet", url=get_connect_url(self.user_agent_id, user_id))],
+            [InlineKeyboardButton("Phantom Mobile", url=get_connect_url(self.user_agent_id, user_id))],
+            [InlineKeyboardButton("Browser Wallets", url=get_browser_connect_url(self.user_agent_id, user_id, self.tg_bot_config.username))],
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -98,15 +99,14 @@ class TGBot:
         user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
 
         if user_wallet is None \
-            or user_wallet.address is None or user_wallet.address == "" \
-            or user_wallet.phantom_session is None or user_wallet.phantom_session == "" \
-            or user_wallet.phantom_encryption_public_key is None or user_wallet.phantom_encryption_public_key == "":
+            or user_wallet.address is None or user_wallet.address == "":
 
             if not is_group_chat:
                 text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
                 url = await asyncio.to_thread(get_connect_url, self.user_agent_id, user_id)
                 keyboard = [
-                    [InlineKeyboardButton("Phantom Wallet", url=url)],
+                    [InlineKeyboardButton("Phantom Mobile", url=get_connect_url(self.user_agent_id, user_id))],
+                    [InlineKeyboardButton("Browser Wallets", url=get_browser_connect_url(self.user_agent_id, user_id, self.tg_bot_config.username))],
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(text, reply_markup=reply_markup)
@@ -145,10 +145,14 @@ class TGBot:
                     return False
 
                 # Send the deposit button
-                url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
-                keyboard = [
-                    [InlineKeyboardButton(f"Pay AWE {price}.00", url=url)],
-                ]
+                keyboard = []
+
+                if user_wallet.phantom_encryption_public_key != "" and user_wallet.phantom_session != "":
+                    url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
+                    keyboard.append([InlineKeyboardButton(f"Phantom Mobile", url=url)])
+
+                keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=get_browser_approve_url(self.user_agent_id, user_id, user_wallet.address, price))])
+
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)
             else:
@@ -157,7 +161,6 @@ class TGBot:
             return False
 
         return True
-
 
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.error("Exception while handling an update:", exc_info=context.error)

@@ -27,6 +27,8 @@ solana_network_endpoints = {
 class AweSettings(BaseSettings):
 
     server_host: str = "https://api.aweai.fun"
+    webui_host: str = "https://aweai.fun"
+
     log_level: str = 'INFO'
     admin_token: str
 

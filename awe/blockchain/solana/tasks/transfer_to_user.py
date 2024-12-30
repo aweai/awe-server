@@ -3,31 +3,16 @@ from solders.pubkey import Pubkey
 from solders.rpc.responses import GetTokenAccountBalanceResp
 from solders.message import Message
 from solders.transaction import Transaction
-from solders.keypair import Keypair
-from solana.rpc.api import Client
 from solana.rpc.commitment import Confirmed
 from solana.rpc.types import TxOpts
-from spl.token.client import Token
 from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import logging
 import spl.token.instructions as spl_token
-from awe.settings import settings
 from awe.celery import app
+from .utils import token_client, awe_mint_public_key, system_payer, http_client
 
 logger = logging.getLogger("[Transfer to User Task]")
 
-awe_mint_public_key = Pubkey.from_string(settings.solana_awe_mint_address)
-system_payer = Keypair.from_base58_string(settings.solana_system_payer_private_key)
-
-logger.info(f"System payer: {str(system_payer.pubkey())}")
-
-http_client = Client(settings.solana_network_endpoint)
-token_client = Token(
-    http_client,
-    awe_mint_public_key,
-    TOKEN_2022_PROGRAM_ID,
-    system_payer
-)
 
 @app.task
 def transfer_to_user(user_wallet: str, amount: int):

@@ -16,6 +16,7 @@ import json
 import logging
 import traceback
 import asyncio
+from awe.settings import settings
 
 logger = logging.getLogger("[Phantom Wallet API]")
 
@@ -325,7 +326,7 @@ async def collect_user_fund(
 
             # Collect user payment
             amount = user_agent.awe_agent.awe_token_config.user_price
-            tx = awe_on_chain.collect_user_payment(user_wallet.address, amount)
+            tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
 
             # Record the transfer tx
             user_deposit = TgUserDeposit(
@@ -339,8 +340,9 @@ async def collect_user_fund(
 
             session.add(user_deposit)
 
-            # Add Memegent account balance
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
+            # Add Memegent pool balance
+            pool_amount = amount - int(settings.tn_agent_creator_share * amount)
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_amount
 
             session.add(user_agent.agent_data)
 

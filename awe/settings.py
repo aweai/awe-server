@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
+from pydantic import model_validator, Field
 import logging
 import enum
 from typing import Optional
@@ -75,6 +75,9 @@ class AweSettings(BaseSettings):
 
     # Delete the env file on disk after loading
     remove_env_file: bool = True
+
+    # Tokenomics
+    tn_agent_creator_share: float = Field(default=0.4, gt=0, le=1)
 
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:

@@ -135,12 +135,14 @@ class AweOnSolana(AweOnChain):
         return bytes(tx)
 
 
-    def collect_user_payment(self, user_wallet: str, amount: int) -> str:
+    def collect_user_payment(self, user_wallet: str, agent_creator_wallet: str, amount: int) -> str:
         # Transfer tokens from the user wallet to the system wallet
+        # 60% to the pool (system wallet)
+        # 40% to the agent creator
         # Return the transaction hash
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_fund',
-            args=(user_wallet, amount),
+            args=(user_wallet, agent_creator_wallet, amount),
             countdown=10
         )
         self.logger.info("Sent collect user payment task to the queue")

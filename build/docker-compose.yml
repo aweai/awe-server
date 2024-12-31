@@ -18,8 +18,6 @@ services:
       - "./models:/app/models"
     ports:
       - '7777:7777'
-    secrets:
-      - env_file
     deploy:
       resources:
         reservations:
@@ -62,7 +60,3 @@ services:
   #             - driver: nvidia
   #               count: all
   #               capabilities: [gpu]
-
-secrets:
-  env_file:
-    file: ./.env

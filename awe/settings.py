@@ -9,13 +9,12 @@ import os
 
 from dotenv import load_dotenv
 
-if os.path.exists("/run/secrets/env_file"):
-    load_dotenv("/run/secrets/env_file")
-elif os.path.exists("persisted_data/.env"):
-    load_dotenv("persisted_data/.env")
-else:
-    raise Exception("Env file not specified!")
+env_file = "persisted_data/.env"
 
+if os.path.exists(env_file):
+    load_dotenv(env_file)
+else:
+    raise Exception(f"Env file not specified: {env_file}")
 
 class LLMType(str, enum.Enum):
     OpenAI = "openai"
@@ -74,6 +73,9 @@ class AweSettings(BaseSettings):
     comm_ed25519_public_key: str
     comm_ed25519_private_key: str
 
+    # Delete the env file on disk after loading
+    remove_env_file: bool = True
+
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:
         if self.llm_type == LLMType.OpenAI and self.openai_api_key == "":
@@ -103,6 +105,11 @@ class AweSettings(BaseSettings):
 
 
 settings = AweSettings()
+
+
+if settings.remove_env_file:
+    os.remove(env_file)
+
 
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 

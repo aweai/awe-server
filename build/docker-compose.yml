@@ -60,3 +60,7 @@ services:
   #             - driver: nvidia
   #               count: all
   #               capabilities: [gpu]
+
+secrets:
+  env_file:
+    file: ./.env

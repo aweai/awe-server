@@ -5,9 +5,17 @@ import enum
 from typing import Optional
 from typing_extensions import Self
 from solders.keypair import Keypair
+import os
 
 from dotenv import load_dotenv
-load_dotenv("persisted_data/.env")
+
+if os.path.exists("/run/secrets/env_file"):
+    load_dotenv("/run/secrets/env_file")
+elif os.path.exists("persisted_data/.env"):
+    load_dotenv("persisted_data/.env")
+else:
+    raise Exception("Env file not specified!")
+
 
 class LLMType(str, enum.Enum):
     OpenAI = "openai"

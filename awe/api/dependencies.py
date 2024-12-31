@@ -119,7 +119,7 @@ def validate_user_agent(agent_id, user_address: Annotated[str, Depends(get_curre
         statement = select(func.count(UserAgent.id)).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         count = session.exec(statement).one()
         if count == 0:

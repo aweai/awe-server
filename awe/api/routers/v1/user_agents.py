@@ -12,7 +12,7 @@ from sqlalchemy.orm import load_only, joinedload
 from sd_task.task_args.inference_task.task_args import InferenceTaskArgs
 from PIL import Image
 from awe.models.utils import unix_timestamp_in_seconds
-from settings import settings
+from awe.settings import settings
 import logging
 
 logger = logging.getLogger("[User Agents API]")
@@ -46,10 +46,11 @@ def get_local_user_agents(user_address: str) -> list[AgentListResponse]:
             )
         ).where(
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         ).order_by(
             UserAgent.created_at.desc()
         )
+
         user_agents = session.exec(statement).all()
 
         return user_agents
@@ -61,7 +62,7 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
         statement = select(UserAgent).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         user_agent_in_db = session.exec(statement).first()
         if user_agent_in_db is None:
@@ -148,7 +149,7 @@ def get_user_agent_by_id(agent_id, user_address: Annotated[str, Depends(get_curr
         statement = select(UserAgent).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         user_agent = session.exec(statement).first()
         return user_agent
@@ -192,7 +193,7 @@ def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_curre
         statement = select(func.count(col(UserAgent.id))).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         num_agents_in_db = session.exec(statement).one()
         if num_agents_in_db == 0:
@@ -212,7 +213,7 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
         statement = select(UserAgent).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         user_agent = session.exec(statement).first()
         if user_agent is None:
@@ -239,7 +240,7 @@ def reset_round_data(agent_id, user_address: Annotated[str, Depends(get_current_
         statement = select(func.count(col(UserAgent.id))).where(
             UserAgent.id == agent_id,
             UserAgent.user_address == user_address,
-            UserAgent.deleted_at is None
+            UserAgent.deleted_at.is_(None)
         )
         num_agents_in_db = session.exec(statement).one()
         if num_agents_in_db == 0:

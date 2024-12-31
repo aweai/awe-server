@@ -57,6 +57,9 @@ class AweSettings(BaseSettings):
     # to send blockchain transactions
     solana_system_payer_private_key: Optional[str] = None
 
+    # Developer account to collect developer fee
+    solana_developer_wallet: str
+
     llm_type: LLMType = LLMType.Local
     agent_response_timeout: int = 100
     llm_task_timeout: int = 60
@@ -77,7 +80,9 @@ class AweSettings(BaseSettings):
     remove_env_file: bool = True
 
     # Tokenomics
-    tn_agent_creator_share: float = Field(default=0.4, gt=0, le=1)
+    tn_agent_creator_share: float = Field(default=0.3, gt=0, le=1)
+    tn_developer_share: float = Field(default=0.01, gt=0, le=1)
+    tn_agent_staking_locking_days: int = Field(default=30, gt=0, le=1)
 
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:

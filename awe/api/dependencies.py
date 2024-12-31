@@ -116,7 +116,11 @@ def validate_user_agent(agent_id, user_address: Annotated[str, Depends(get_curre
     )
 
     with Session(engine) as session:
-        statement = select(func.count(UserAgent.id)).where(UserAgent.id == agent_id, UserAgent.user_address == user_address)
+        statement = select(func.count(UserAgent.id)).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
         count = session.exec(statement).one()
         if count == 0:
             raise exception

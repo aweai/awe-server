@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, BackgroundTasks
 from awe.models.user_agent import UserAgent
 from awe.models.user_agent_data import UserAgentData
 from awe.models.tg_bot import TGBot
@@ -9,9 +9,13 @@ from sqlmodel import Session, select, func, col, SQLModel
 from ...dependencies import get_current_user, validate_user_agent
 from awe.blockchain import awe_on_chain
 from sqlalchemy.orm import load_only, joinedload
-import time
 from sd_task.task_args.inference_task.task_args import InferenceTaskArgs
 from PIL import Image
+from awe.models.utils import unix_timestamp_in_seconds
+from settings import settings
+import logging
+
+logger = logging.getLogger("[User Agents API]")
 
 router = APIRouter(
     prefix="/v1/user-agents"
@@ -41,7 +45,8 @@ def get_local_user_agents(user_address: str) -> list[AgentListResponse]:
                 UserAgent.tg_bot
             )
         ).where(
-            UserAgent.user_address == user_address
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
         ).order_by(
             UserAgent.created_at.desc()
         )
@@ -53,7 +58,11 @@ def get_local_user_agents(user_address: str) -> list[AgentListResponse]:
 @router.put("/{agent_id}", response_model=Optional[UserAgent])
 def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[str, Depends(get_current_user)]):
     with Session(engine) as session:
-        statement = select(UserAgent).where(UserAgent.id == agent_id, UserAgent.user_address == user_address)
+        statement = select(UserAgent).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
         user_agent_in_db = session.exec(statement).first()
         if user_agent_in_db is None:
             return None
@@ -124,7 +133,7 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
     user_agent_in_db.tg_bot = user_agent.tg_bot
     user_agent_in_db.awe_agent = user_agent.awe_agent
     user_agent_in_db.enabled = user_agent.enabled
-    user_agent_in_db.updated_at = int(time.time())
+    user_agent_in_db.updated_at = unix_timestamp_in_seconds()
     with Session(engine) as session:
         session.add(user_agent_in_db)
         session.commit()
@@ -136,7 +145,11 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
 @router.get("/{agent_id}", response_model=Optional[UserAgent])
 def get_user_agent_by_id(agent_id, user_address: Annotated[str, Depends(get_current_user)]):
     with Session(engine) as session:
-        statement = select(UserAgent).where(UserAgent.id == agent_id, UserAgent.user_address == user_address)
+        statement = select(UserAgent).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
         user_agent = session.exec(statement).first()
         return user_agent
 
@@ -161,6 +174,7 @@ def import_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
             for _ in range(num_agents_on_chain - num_agents_in_db):
                 user_agent = UserAgent(
                     user_address=user_address,
+                    staking_amount=settings.tn_agent_staking_amount,
                     agent_data=UserAgentData()
                 )
                 session.add(user_agent)
@@ -175,7 +189,11 @@ def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_curre
     agent_id = int(agent_id)
 
     with Session(engine) as session:
-        statement = select(func.count(col(UserAgent.id))).where(UserAgent.id == agent_id, UserAgent.user_address == user_address)
+        statement = select(func.count(col(UserAgent.id))).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
         num_agents_in_db = session.exec(statement).one()
         if num_agents_in_db == 0:
             return None
@@ -188,10 +206,41 @@ def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_curre
 
         return agent_data
 
+@router.delete("/{agent_id}")
+def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+    with Session(engine) as session:
+        statement = select(UserAgent).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
+        user_agent = session.exec(statement).first()
+        if user_agent is None:
+            return None
+
+        current_time = unix_timestamp_in_seconds()
+
+        if current_time - user_agent.created_at < settings.tn_agent_staking_locking_days * 86400:
+            raise Exception("Still in locking period, can not terminate")
+
+        user_agent.updated_at = current_time
+        user_agent.deleted_at = current_time
+        user_agent.enabled = False
+        session.add(user_agent)
+        session.commit()
+
+    background_tasks.add_task(return_agent_staking, user_agent.user_address, user_agent.staking_amount)
+
+
+
 @router.post("/{agent_id}/round", response_model=UserAgentData)
 def reset_round_data(agent_id, user_address: Annotated[str, Depends(get_current_user)]):
     with Session(engine) as session:
-        statement = select(func.count(col(UserAgent.id))).where(UserAgent.id == agent_id, UserAgent.user_address == user_address)
+        statement = select(func.count(col(UserAgent.id))).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at is None
+        )
         num_agents_in_db = session.exec(statement).one()
         if num_agents_in_db == 0:
             return None
@@ -228,3 +277,9 @@ def upload_pfp(agent_id, file: UploadFile, _: Annotated[bool, Depends(validate_u
     img_cropped = img.crop((left, top, right, bottom))
     img_resized = img_cropped.resize((keep_size, keep_size), Image.Resampling.LANCZOS)
     img_resized.save(f"persisted_data/pfps/{agent_id}.png", "PNG")
+
+
+def return_agent_staking(creator_address: str, amount: int):
+    logger.info(f"Returning agent staking {creator_address}: {amount}")
+    amount_full = int(int(amount) * int(1e9))
+    awe_on_chain.transfer_to_user(creator_address, amount_full)

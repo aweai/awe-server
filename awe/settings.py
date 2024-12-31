@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import model_validator, Field
 import logging
 import enum
-from typing import Optional
+from typing import Optional, Annotated
 from typing_extensions import Self
 from solders.keypair import Keypair
 import os
@@ -80,9 +80,10 @@ class AweSettings(BaseSettings):
     remove_env_file: bool = True
 
     # Tokenomics
-    tn_agent_creator_share: float = Field(default=0.3, gt=0, le=1)
-    tn_developer_share: float = Field(default=0.01, gt=0, le=1)
-    tn_agent_staking_locking_days: int = Field(default=30, gt=0, le=1)
+    tn_agent_creator_share: Annotated[float, Field(default=0.3, gt=0, le=1)]
+    tn_developer_share: Annotated[float, Field(default=0.01, gt=0, le=1)]
+    tn_agent_staking_amount: Annotated[int, Field(default=100, gt=0)]
+    tn_agent_staking_locking_days: Annotated[int, Field(default=30, gt=0)]
 
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:

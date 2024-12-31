@@ -9,11 +9,13 @@ class UserAgent(SQLModel, table=True):
     id: int | None = Field(primary_key=True, default=None)
     name: str = Field(default="New AI Meme")
     user_address: str = Field(index=True)
+    staking_amount: int = Field(nullable=True)
     tg_bot: Optional[TGBot] = Field(sa_column=Column(TGBotSAType))
     awe_agent: Optional[AweAgent] = Field(sa_column=Column(AweAgentSAType))
     enabled: bool = Field(default=False)
     created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
     updated_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
+    deleted_at: Optional[int] = Field(nullable=True)
     agent_data: Optional[UserAgentData] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 
     def validate_for_save(self) -> str:

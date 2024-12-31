@@ -4,3 +4,5 @@
 !docker-compose.yml
 !Dockerfile
 !.gitignore
+!encrypt.sh
+!decrypt.sh

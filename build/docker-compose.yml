@@ -18,6 +18,8 @@ services:
       - "./models:/app/models"
     ports:
       - '7777:7777'
+    secrets:
+      - env_file
     deploy:
       resources:
         reservations:

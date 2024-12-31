@@ -109,8 +109,10 @@ class AweSettings(BaseSettings):
 
 settings = AweSettings()
 
+# Prevent deleting env file using env var
 
-if settings.remove_env_file:
+keep_env_file = os.getenv("AWE_KEEP_ENV_FILE", False)
+if settings.remove_env_file and not keep_env_file:
     os.remove(env_file)
 
 

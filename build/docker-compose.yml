@@ -12,7 +12,9 @@ services:
     image: awe:dev
     container_name: awe_server
     restart: always
-    command: /app/venv/bin/python -m alembic upgrade head && /app/venv/bin/python run.py
+    command:
+      - AWE_KEEP_ENV_FILE=True /app/venv/bin/python -m alembic upgrade head
+      - AWE_KEEP_ENV_FILE=False /app/venv/bin/python run.py
     volumes:
       - "./persisted_data:/app/persisted_data"
       - "./models:/app/models"

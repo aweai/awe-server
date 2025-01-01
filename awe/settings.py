@@ -83,7 +83,7 @@ class AweSettings(BaseSettings):
     tn_agent_creator_share: Annotated[float, Field(default=0.3, gt=0, le=1)]
     tn_developer_share: Annotated[float, Field(default=0.01, gt=0, le=1)]
     tn_agent_staking_amount: Annotated[int, Field(default=100, gt=0)]
-    tn_agent_staking_locking_days: Annotated[int, Field(default=30, gt=0)]
+    tn_agent_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
 
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:

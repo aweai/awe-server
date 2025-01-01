@@ -229,9 +229,9 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
         user_agent.enabled = False
         session.add(user_agent)
         session.commit()
+        session.refresh(user_agent)
 
-    background_tasks.add_task(return_agent_staking, user_agent.user_address, user_agent.staking_amount)
-
+        background_tasks.add_task(return_agent_staking, user_agent.user_address, user_agent.staking_amount)
 
 
 @router.post("/{agent_id}/round", response_model=UserAgentData)

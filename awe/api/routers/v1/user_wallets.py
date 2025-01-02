@@ -60,7 +60,7 @@ def handle_bind_wallet(agent_id: int, tg_user_id: str, wallet_address: str, time
 
 
 @router.post("/approve/{agent_id}/{tg_user_id}")
-def handle_approve(agent_id: int, tg_user_id: str, signature: str, background_tasks: BackgroundTasks):
+def handle_approve(agent_id: int, tg_user_id: str, action: str, amount: int, signature: str, background_tasks: BackgroundTasks):
 
     # Process the payment in the background
-    background_tasks.add_task(collect_user_fund, agent_id, tg_user_id, signature)
+    background_tasks.add_task(collect_user_fund, action, amount, agent_id, tg_user_id, signature)

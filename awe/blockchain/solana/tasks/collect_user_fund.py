@@ -104,3 +104,43 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
 
     send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
     return str(send_tx_resp.value)
+
+
+@app.task
+def collect_user_staking(user_wallet: str, amount: int) -> str:
+    logger.info(f"collecting user staking: {user_wallet}: {amount}")
+
+    system_payer_associated_token_account = spl_token.get_associated_token_address(
+        system_payer.pubkey(),
+        awe_mint_public_key,
+        TOKEN_2022_PROGRAM_ID
+    )
+
+    user_wallet_pk = Pubkey.from_string(user_wallet)
+    user_associated_token_account = spl_token.get_associated_token_address(
+        user_wallet_pk,
+        awe_mint_public_key,
+        TOKEN_2022_PROGRAM_ID
+    )
+
+    ix = spl_token.transfer_checked(spl_token.TransferCheckedParams(
+        source=user_associated_token_account,
+        dest=system_payer_associated_token_account,
+        owner=system_payer.pubkey(),
+        amount=int(amount * 1e9),
+        decimals=9,
+        mint=awe_mint_public_key,
+        program_id=TOKEN_2022_PROGRAM_ID
+    ))
+
+    recent_blockhash = http_client.get_latest_blockhash().value.blockhash
+
+    tx = Transaction.new_signed_with_payer(
+        [ix],
+        system_payer.pubkey(),
+        [system_payer],
+        recent_blockhash
+    )
+
+    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+    return str(send_tx_resp.value)

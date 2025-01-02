@@ -11,7 +11,7 @@ from awe.models.tg_bot_user_wallet import TGBotUserWallet
 from awe.models.user_agent_user_invocations import UserAgentUserInvocations
 from awe.blockchain.phantom import get_wallet_verification_url
 from awe.models.user_agent import UserAgent
-from awe.models import TgUserDeposit, UserAgentData
+from awe.models import TgUserDeposit, UserAgentData, UserStaking
 from solders.pubkey import Pubkey
 import json
 import logging
@@ -225,6 +225,8 @@ def handle_phantom_verify_callback(
 def handle_phantom_approve_callback(
     agent_id: int,
     tg_user_id: str,
+    action: str,
+    amount: int,
     background_tasks: BackgroundTasks,
     error_code: Annotated[str | None, Query(alias="errorCode")] = None,
     error_message: Annotated[str | None, Query(alias="errorMessage")] = None,
@@ -246,7 +248,7 @@ def handle_phantom_approve_callback(
         return {"errorMessage": "Invalid response from Phantom"}
 
     # Process the payment in the background
-    background_tasks.add_task(collect_user_fund, agent_id, tg_user_id, payload["signature"])
+    background_tasks.add_task(collect_user_fund, action, amount, agent_id, tg_user_id, payload["signature"])
 
     # Get tg bot username
     with Session(engine) as session:
@@ -305,6 +307,8 @@ def decrypt_payload(agent_id: int, tg_user_id: str, nonce: str, data: str) -> di
 
 
 async def collect_user_fund(
+    action: str,
+    amount: int,
     agent_id: int,
     tg_user_id: str,
     approve_tx: str,
@@ -321,39 +325,54 @@ async def collect_user_fund(
             statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
             user_wallet = session.exec(statement).first()
 
-            # Get agent user price from db
-            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-            user_agent = session.exec(statement).first()
+            if action == "user_payment":
+                # Get agent user price from db
+                statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+                user_agent = session.exec(statement).first()
 
-            # Collect user payment
-            amount = user_agent.awe_agent.awe_token_config.user_price
-            tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
+                # Collect user payment
+                amount = user_agent.awe_agent.awe_token_config.user_price
+                tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
 
-            # Record the transfer tx
-            user_deposit = TgUserDeposit(
-                user_agent_id=agent_id,
-                tg_user_id=tg_user_id,
-                user_agent_round=user_agent.agent_data.current_round,
-                address=user_wallet.address,
-                amount=amount,
-                tx_hash=tx
-            )
+                # Record the transfer tx
+                user_deposit = TgUserDeposit(
+                    user_agent_id=agent_id,
+                    tg_user_id=tg_user_id,
+                    user_agent_round=user_agent.agent_data.current_round,
+                    address=user_wallet.address,
+                    amount=amount,
+                    tx_hash=tx
+                )
 
-            session.add(user_deposit)
+                session.add(user_deposit)
 
-            # Add Memegent pool balance
-            pool_amount = amount - int(settings.tn_agent_creator_share * amount)
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_amount
+                # Add Memegent pool balance
+                pool_amount = amount - int(settings.tn_agent_creator_share * amount)
+                user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_amount
 
-            session.add(user_agent.agent_data)
-            session.commit()
+                session.add(user_agent.agent_data)
+                session.commit()
 
-            session.refresh(user_agent)
+                session.refresh(user_agent)
 
-            # Reset user payment invocation count
-            if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
-                UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
+                # Reset user payment invocation count
+                if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
+                    UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
 
+            elif action == "user_staking":
+                # Collect user staking
+                tx = awe_on_chain.collect_user_staking(user_wallet.address, amount)
+
+                # Record the transfer tx
+                user_staking = UserStaking(
+                    tg_user_id=tg_user_id,
+                    user_agent_id=agent_id,
+                    amount=amount,
+                    tx_hash=tx
+                )
+
+                session.add(user_staking)
+                session.commit()
 
     except Exception as e:
         logger.error(e)

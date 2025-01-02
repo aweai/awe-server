@@ -53,6 +53,15 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
+    def collect_user_staking(self, user_wallet: str, amount: int) -> str:
+        # Transfer tokens from the user wallet to the system wallet
+        # 69% to the pool (system wallet)
+        # 30% to the agent creator
+        # 1% to the developer
+        # Return the transaction hash
+        pass
+
+    @abstractmethod
     def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
         # Wait for the confirmation of the given tx
         # Or timeout

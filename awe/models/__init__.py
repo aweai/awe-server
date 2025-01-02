@@ -9,3 +9,4 @@ from .user_agent_stats_token_transfer_daily_counts import UserAgentStatsTokenTra
 from .tg_phantom_used_nonce import TGPhantomUsedNonce
 from .tg_user_deposit import TgUserDeposit
 from .user_agent_user_invocations import UserAgentUserInvocations
+from .user_staking import UserStaking

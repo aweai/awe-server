@@ -149,6 +149,16 @@ class AweOnSolana(AweOnChain):
         return task.get()
 
 
+    def collect_user_staking(self, user_wallet: str, amount: int) -> str:
+        # Transfer tokens from the user wallet to the system wallet
+        # Return the transaction hash
+        task = app.send_task(
+            name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_staking',
+            args=(user_wallet, amount)
+        )
+        self.logger.info("Sent collect user staking task to the queue")
+        return task.get()
+
     def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
         # Wait for the confirmation of the given tx
         # Or timeout

@@ -133,22 +133,35 @@ class PaymentLimitHandler(LimitHandler):
                 return 0
             return chances
 
-
-    async def ask_for_payment(self, update: Update, context: ContextTypes.DEFAULT_TYPE, tg_user_id: str, user_wallet: TGBotUserWallet):
-        price = self.aweAgent.config.awe_token_config.user_price
-        self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
-
+    async def check_user_balance(self, address: str, minimum: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         # Check the user balance
-        user_balance = await asyncio.to_thread(awe_on_chain.get_balance, user_wallet.address)
+        user_balance = await asyncio.to_thread(awe_on_chain.get_balance, address)
         user_balance_int = int(user_balance / 1e9)
 
         self.logger.debug(f"User balance: {user_balance_int}.00")
 
-        if user_balance_int < price:
-            await update.message.reply_text(f"You don't have enough AWE tokens to pay ({user_wallet.address}: {user_balance_int}.00). Transfer {price}.00 AWE to your wallet to begin.")
+        if user_balance_int < minimum:
+
+            msg = f"You don't have enough AWE tokens to pay ({address}: {user_balance_int}.00)."
+            if minimum > 0:
+                msg = msg + f"Transfer {minimum}.00 AWE to your wallet to begin."
+            else:
+                msg = msg + f"Transfer some AWE to your wallet to begin."
+
+            await update.message.reply_text(msg)
+
             return False
 
-        # Send the deposit button
+        return True
+
+    async def get_approve_buttons(
+            self,
+            action: str,
+            tg_user_id: str,
+            user_wallet: TGBotUserWallet,
+            amount: int
+        ) -> InlineKeyboardMarkup:
+
         keyboard = []
 
         if user_wallet.phantom_encryption_public_key is not None \
@@ -156,11 +169,46 @@ class PaymentLimitHandler(LimitHandler):
             and user_wallet.phantom_session is not None \
             and user_wallet.phantom_session != "":
 
-            approve_url = await asyncio.to_thread(get_approve_url, self.user_agent_id, tg_user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
+            approve_url = await asyncio.to_thread(
+                get_approve_url,
+                action,
+                self.user_agent_id,
+                tg_user_id,
+                amount,
+                user_wallet.address,
+                user_wallet.phantom_session,
+                user_wallet.phantom_encryption_public_key
+            )
+
             keyboard.append([InlineKeyboardButton(f"Phantom Mobile", url=approve_url)])
 
-        browser_approve_url = await asyncio.to_thread(get_browser_approve_url, self.user_agent_id, tg_user_id, user_wallet.address, price, self.tg_bot_config.username)
+        browser_approve_url = await asyncio.to_thread(
+            get_browser_approve_url,
+            action,
+            self.user_agent_id,
+            tg_user_id,
+            user_wallet.address,
+            amount,
+            self.tg_bot_config.username
+        )
+
         keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=browser_approve_url)])
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        return InlineKeyboardMarkup(keyboard)
+
+    async def ask_for_payment(self, update: Update, context: ContextTypes.DEFAULT_TYPE, tg_user_id: str, user_wallet: TGBotUserWallet):
+        price = self.aweAgent.config.awe_token_config.user_price
+        self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
+
+        if not await self.check_user_balance(user_wallet.address, price, update, context):
+            return
+
+        # Send the deposit button
+        reply_markup = await self.get_approve_buttons(
+            "user_payment",
+            tg_user_id,
+            user_wallet,
+            price
+        )
+
         await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to use this Memegent", reply_markup=reply_markup)

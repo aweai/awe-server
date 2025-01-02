@@ -41,7 +41,15 @@ def get_browser_connect_url(agent_id: int, tg_user_id: str, tg_bot_username: str
 
     return f"{settings.webui_host}/callback/user-wallets/bind/{agent_id}/{tg_user_id}?timestamp={timestamp}&signature={signature}&tg_bot={tg_bot_username}"
 
-def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
+def get_approve_url(
+        action: str,
+        agent_id: int,
+        tg_user_id: str,
+        amount: int,
+        user_wallet: str,
+        phantom_session: str,
+        phantom_encryption_public_key: str
+    ) -> str:
 
     transaction = awe_on_chain.get_user_approve_transaction(user_wallet, amount)
 
@@ -52,13 +60,20 @@ def get_approve_url(agent_id: int, tg_user_id: str, amount: int, user_wallet: st
 
     logger.debug(f"plain payload str: {plain_payload}")
 
-    redirect_link = urllib.parse.quote_plus(f"{settings.server_host}/v1/tg-phantom-wallets/approve/{agent_id}/{tg_user_id}")
+    redirect_link = urllib.parse.quote_plus(f"{settings.server_host}/v1/tg-phantom-wallets/approve/{agent_id}/{tg_user_id}?action={action}&amount={amount}")
     encrypted_payload, nonce = encrypt_phantom_data(phantom_encryption_public_key, plain_payload)
 
     return f"https://phantom.app/ul/v1/signAndSendTransaction?dapp_encryption_public_key={comm_x25519_public_key_str}&nonce={nonce}&redirect_link={redirect_link}&payload={encrypted_payload}"
 
-def get_browser_approve_url(agent_id: int, tg_user_id: str, user_wallet: str, amount: int, tg_bot_username: str):
-    return f"{settings.webui_host}/callback/user-wallets/approve/{agent_id}/{tg_user_id}/{user_wallet}?amount={amount}&tg_bot={tg_bot_username}"
+def get_browser_approve_url(
+        action: str,
+        agent_id: int,
+        tg_user_id: str,
+        user_wallet: str,
+        amount: int,
+        tg_bot_username: str
+    ):
+    return f"{settings.webui_host}/callback/user-wallets/approve/{agent_id}/{tg_user_id}/{user_wallet}?amount={amount}&tg_bot={tg_bot_username}&action={action}"
 
 def get_wallet_verification_url(agent_id: int, tg_user_id: str, wallet_address: str, phantom_session: str, phantom_encryption_public_key: str) -> str:
 

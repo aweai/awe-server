@@ -11,6 +11,7 @@ from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from .payment_limit_handler import PaymentLimitHandler
 from .round_limit_handler import RoundLimitHandler
+from .staking_handler import StakingHandler
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -44,6 +45,13 @@ class TGBot:
         # Chances command
         chances_handler = CommandHandler("chances", self.chances_command)
         self.application.add_handler(chances_handler)
+
+        # Staking handler
+        self.staking_handler = StakingHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+
+        # Staking command
+        staking_command_handler = CommandHandler("staking", self.staking_handler.staking_command)
+        self.application.add_handler(staking_command_handler)
 
         # Message handler
         message_handler = MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT & (~filters.COMMAND), self.respond_message)

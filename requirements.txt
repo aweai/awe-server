@@ -10,7 +10,7 @@ solders==0.21.0
 solana==0.35.1
 pillow==11.0.0
 pymysql==1.1.1
-cryptograph==44.0.0
+cryptography==44.0.0
 alembic==1.14.0
 redis[hiredis]==5.2.0
 python-multipart==0.0.18

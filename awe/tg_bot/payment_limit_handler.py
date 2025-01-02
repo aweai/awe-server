@@ -127,7 +127,11 @@ class PaymentLimitHandler(LimitHandler):
         if user_invocation is None:
             return self.aweAgent.config.awe_token_config.max_invocation_per_payment
         else:
-            return self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
+            chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
+
+            if chances <= 0:
+                return 0
+            return chances
 
 
     async def ask_for_payment(self, update: Update, context: ContextTypes.DEFAULT_TYPE, tg_user_id: str, user_wallet: TGBotUserWallet):

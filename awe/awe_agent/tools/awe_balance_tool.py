@@ -12,7 +12,7 @@ class AweBalanceTool(AweTokenTool):
     name: str = "QueryAweBalance"
     description: str =  (
         "Useful for when you need to check the balance of the user, not yourself."
-        "Input: there is no input to this tool"
+        "Input: an empty string, no other info needed"
         "Output: the balance of the AWE token in the wallet"
     )
     return_direct: bool = True

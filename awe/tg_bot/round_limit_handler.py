@@ -25,7 +25,7 @@ class RoundLimitHandler(LimitHandler):
         if user_invocation.current_round == user_agent_data.current_round \
             and user_invocation.round_invocations >= self.aweAgent.config.awe_token_config.max_invocation_per_round:
 
-            update.message.reply_text("You have reached the invocation limit of this round. Please wait for the next round.")
+            await update.message.reply_text("You have reached the invocation limit of this round. Please wait for the next round.")
             return False
 
         return True
@@ -45,4 +45,7 @@ class RoundLimitHandler(LimitHandler):
         if user_invocation is None or user_invocation.current_round != user_agent_data.current_round:
             return self.aweAgent.config.awe_token_config.max_invocation_per_round
         else:
-            return self.aweAgent.config.awe_token_config.max_invocation_per_round - user_invocation.round_invocations
+            chances = self.aweAgent.config.awe_token_config.max_invocation_per_round - user_invocation.round_invocations
+            if chances < 0:
+                return 0
+            return chances

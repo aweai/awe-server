@@ -8,6 +8,7 @@ from sqlalchemy.orm import load_only, joinedload
 from awe.db import engine
 from awe.models.tg_phantom_used_nonce import TGPhantomUsedNonce
 from awe.models.tg_bot_user_wallet import TGBotUserWallet
+from awe.models.user_agent_user_invocations import UserAgentUserInvocations
 from awe.blockchain.phantom import get_wallet_verification_url
 from awe.models.user_agent import UserAgent
 from awe.models import TgUserDeposit, UserAgentData
@@ -309,7 +310,7 @@ async def collect_user_fund(
     approve_tx: str,
 ):
     # Wait for the finalize of the approve tx before
-    await asyncio.sleep(30)
+    await asyncio.sleep(20)
 
     try:
         # Wait for the approve tx to be confirmed before next step
@@ -345,8 +346,15 @@ async def collect_user_fund(
             user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_amount
 
             session.add(user_agent.agent_data)
-
             session.commit()
+
+            session.refresh(user_agent)
+
+            # Reset user payment invocation count
+            if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
+                UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
+
+
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

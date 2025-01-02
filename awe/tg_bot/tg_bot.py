@@ -1,18 +1,16 @@
 import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, constants
+from telegram import Update, constants
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from awe.awe_agent.awe_agent import AweAgent
+from awe.models import UserAgentUserInvocations, UserAgentData
 from PIL import Image
 import io
 from pathlib import Path
 import asyncio
 from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
-from ..models.tg_bot_user_wallet import TGBotUserWallet
-from ..models.tg_user_deposit import TgUserDeposit
-from awe.blockchain.phantom import get_connect_url, get_approve_url, get_browser_connect_url, get_browser_approve_url
-from awe.blockchain import awe_on_chain
-from typing import Optional
+from .payment_limit_handler import PaymentLimitHandler
+from .round_limit_handler import RoundLimitHandler
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -34,9 +32,18 @@ class TGBot:
         start_handler = CommandHandler('start', self.start_command)
         self.application.add_handler(start_handler)
 
-        # Wallet handler
-        wallet_handler = CommandHandler('wallet', self.wallet_command)
-        self.application.add_handler(wallet_handler)
+        # Payment limit handler
+        self.payment_limit_handler = PaymentLimitHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+
+        wallet_command_handler = CommandHandler('wallet', self.payment_limit_handler.wallet_command)
+        self.application.add_handler(wallet_command_handler)
+
+        # Round limit handler
+        self.round_limit_handler = RoundLimitHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+
+        # Chances command
+        chances_handler = CommandHandler("chances", self.chances_command)
+        self.application.add_handler(chances_handler)
 
         # Message handler
         message_handler = MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT & (~filters.COMMAND), self.respond_message)
@@ -59,112 +66,24 @@ class TGBot:
                 f"{update.effective_chat.id}")
             await self.send_response(resp, update, context)
 
-    async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def chances_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if self.aweAgent.config.awe_token_config.max_invocation_per_round == 0 \
+            and self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
 
-        if update.effective_user is None:
-            await self.send_response("User ID not found", update, context)
-            return
-
-        user_id = str(update.effective_user.id)
-
-        if user_id is None or user_id == "":
-            await self.send_response("User ID not found", update, context)
-            return
-
-        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
-
-        if user_wallet is None or user_wallet.address is None or user_wallet.address == "":
-            text = "You didn't bind your Solana wallet yet. Click the button below to bind your Solana wallet."
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="This Memegent has no invocation limit.")
         else:
-            text = f"Your Solana wallet address is {user_wallet.address}. Click the button below to bind a new wallet."
+            msg = ""
+            if self.aweAgent.config.awe_token_config.max_invocation_per_round != 0:
+                chances = await self.round_limit_handler.get_round_chances(update)
+                msg = msg + f"{chances} left for this round."
+            if self.aweAgent.config.awe_token_config.max_invocation_per_payment != 0:
+                chances = await self.payment_limit_handler.get_payment_chances(update)
+                if msg != "":
+                    msg = msg + "\n"
+                msg = msg + f"{chances} left for this payment. Reset by paying again."
 
-        keyboard = [
-            [InlineKeyboardButton("Phantom Mobile", url=get_connect_url(self.user_agent_id, user_id))],
-            [InlineKeyboardButton("Browser Wallets", url=get_browser_connect_url(self.user_agent_id, user_id, self.tg_bot_config.username))],
-        ]
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(text, reply_markup=reply_markup)
-
-    async def check_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> Optional[TGBotUserWallet]:
-        if update.effective_user is None:
-            await self.send_response("User ID not found", update, context)
-            return None
-
-        user_id = str(update.effective_user.id)
-        if user_id is None or user_id == "":
-            await self.send_response("User ID not found", update, context)
-            return None
-
-        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
-
-        if user_wallet is None \
-            or user_wallet.address is None or user_wallet.address == "":
-
-            if not is_group_chat:
-                text = "You must bind your Solana wallet first. Click the button below to bind your wallet."
-                url = await asyncio.to_thread(get_connect_url, self.user_agent_id, user_id)
-                keyboard = [
-                    [InlineKeyboardButton("Phantom Mobile", url=get_connect_url(self.user_agent_id, user_id))],
-                    [InlineKeyboardButton("Browser Wallets", url=get_browser_connect_url(self.user_agent_id, user_id, self.tg_bot_config.username))],
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(text, reply_markup=reply_markup)
-            else:
-                text = "Please DM me to bind your wallet first."
-                await update.message.reply_text(text)
-
-            return None
-
-        return user_wallet
-
-    async def check_deposit(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
-
-        user_wallet = await self.check_wallet(update, context, is_group_chat)
-        if user_wallet is None:
-            return False
-
-        user_id = str(update.effective_user.id)
-        tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round, self.user_agent_id, user_id)
-        if tg_user_deposit is None:
-
-            self.logger.debug("User not paid.")
-
-            if not is_group_chat:
-                price = self.aweAgent.config.awe_token_config.user_price
-                self.logger.debug(f"Price of use agent is {price}. Checking user balance...")
-
-                # Check the user balance
-                user_balance = await asyncio.to_thread(awe_on_chain.get_balance, user_wallet.address)
-                user_balance_int = int(user_balance / 1e9)
-
-                self.logger.debug(f"User balance: {user_balance_int}.00")
-
-                if user_balance_int < price:
-                    await update.message.reply_text(f"You don't have enough AWE tokens to pay ({user_wallet.address}: {user_balance_int}.00). Transfer {price}.00 AWE to your wallet to begin.")
-                    return False
-
-                # Send the deposit button
-                keyboard = []
-
-                if user_wallet.phantom_encryption_public_key is not None \
-                    and user_wallet.phantom_encryption_public_key!= "" \
-                    and user_wallet.phantom_session is not None \
-                    and user_wallet.phantom_session != "":
-
-                    url = await asyncio.to_thread(get_approve_url, self.user_agent_id, user_id, price, user_wallet.address, user_wallet.phantom_session, user_wallet.phantom_encryption_public_key)
-                    keyboard.append([InlineKeyboardButton(f"Phantom Mobile", url=url)])
-
-                keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=get_browser_approve_url(self.user_agent_id, user_id, user_wallet.address, price, self.tg_bot_config.username))])
-
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to start using this Memegent", reply_markup=reply_markup)
-            else:
-                await update.message.reply_text(f"Please DM me to pay first.")
-
-            return False
-
-        return True
 
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.error("Exception while handling an update:", exc_info=context.error)
@@ -189,12 +108,26 @@ class TGBot:
             return ""
         return "\n".join(self.group_chat_contents[chat_id])
 
+    async def check_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
+        # Check round limit
+        if not await self.round_limit_handler.check_round_limit(update, context):
+            return False
+
+        # Check payment limit
+        if self.aweAgent.config.awe_token_enabled:
+            if not await self.payment_limit_handler.check_deposit(update, context, is_group_chat):
+                return False
+
+        return True
+
+    async def increase_invocation(self, tg_user_id: str):
+        user_agent_data = await asyncio.to_thread(UserAgentData.get_user_agent_data_by_id, self.user_agent_id)
+        await asyncio.to_thread(UserAgentUserInvocations.add_invocation, self.user_agent_id, tg_user_id, user_agent_data.current_round)
+
     async def respond_dm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        # Check user deposit
-        if self.aweAgent.config.awe_token_enabled:
-            if not await self.check_deposit(update, context, False):
-                return
+        if not await self.check_limits(update, context, False):
+            return
 
         user_id = str(update.effective_user.id)
 
@@ -202,6 +135,8 @@ class TGBot:
             "[Private chat] " + update.message.text,
             user_id,
             user_id)
+
+        await self.increase_invocation(user_id)
 
         await self.send_response(resp, update, context)
 
@@ -214,16 +149,14 @@ class TGBot:
                 bot_mentioned = True
 
         if update.effective_chat is None:
-            await self.send_response("Chat ID not found", update, context)
+            await self.send_response({"text": "Chat ID not found"}, update, context)
             return
 
         chat_id = f"{update.effective_chat.id}"
 
         if bot_mentioned:
-            # Check user deposit
-            if self.aweAgent.config.awe_token_enabled:
-                if not await self.check_deposit(update, context, True):
-                    return
+            if not await self.check_limits(update, context, True):
+                return
 
             user_id = str(update.effective_user.id)
             history_messages = await asyncio.to_thread(self.get_group_chat_history, chat_id)
@@ -232,6 +165,8 @@ class TGBot:
                 "[Group chat] " + history_messages + "\n" + update.message.text,
                 user_id
             )
+
+            await self.increase_invocation(user_id)
 
             await self.send_response(resp, update, context)
 

@@ -17,7 +17,15 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
     # 1% to the developer
 
     agent_creator_amount = int(amount * settings.tn_agent_creator_share)
+
+    if agent_creator_amount == 0:
+        agent_creator_amount = 1
+
     developer_amount = int(amount * settings.tn_developer_share)
+
+    if developer_amount == 0:
+        developer_amount = 1
+
     pool_amount = amount - agent_creator_amount - developer_amount
 
     logger.info(f"collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")

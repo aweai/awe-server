@@ -4,9 +4,11 @@ from telegram.ext import ContextTypes
 import logging
 import asyncio
 from awe.models import UserStaking
+from awe.models.utils import unix_timestamp_in_seconds
 from datetime import datetime
 from awe.settings import settings
 import prettytable
+from awe.blockchain import awe_on_chain
 
 class StakingHandler(PaymentLimitHandler):
 
@@ -83,9 +85,68 @@ class StakingHandler(PaymentLimitHandler):
             "Please use the buttons below to approve the transaction",
             reply_markup=reply_markup)
 
-
     async def release_staking(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        pass
+        try:
+            staking_id = int(context.args[1])
+        except:
+            await context.bot.send_message(update.effective_chat.id, "Invalid ID provided")
+
+        user_id = self.get_tg_user_id_from_update(update)
+        if user_id is None:
+            return
+
+        user_staking = await asyncio.to_thread(UserStaking.get_user_staking, staking_id, self.user_agent_id, user_id)
+
+        if user_staking is None:
+            await context.bot.send_message(update.effective_chat.id, "Invalid ID provided")
+            return
+
+        now = unix_timestamp_in_seconds()
+        if now - user_staking.created_at < settings.tn_user_staking_locking_days * 86400:
+            await context.bot.send_message(update.effective_chat.id, "Staking is still locked!")
+            return
+
+        user_wallet = await self.check_wallet(update, context, False)
+
+        if user_wallet is None:
+            return
+
+        try:
+            tx = await asyncio.to_thread(
+                self.return_user_staking,
+                staking_id,
+                user_staking.amount,
+                user_wallet.address,
+                self.user_agent_id,
+                user_id
+            )
+
+            msg = "Your staking has been returned!\n\n" + tx
+            await context.bot.send_message(update.effective_chat.id, msg)
+
+        except Exception as e:
+            self.logger.error(e)
+            await context.bot.send_message(update.effective_chat.id, "Error release the staking. Please try again later.")
+
+
+    def return_user_staking(self, staking_id: int, amount: int, wallet_address: str, user_agent_id: int, tg_user_id: str) -> str:
+
+        self.logger.info(f"[{staking_id}] Releasing user staking")
+
+        # Update the staking status
+        UserStaking.release_user_staking(staking_id, user_agent_id, tg_user_id)
+
+        self.logger.info(f"[{staking_id}] Staking status updated")
+
+        # Send the transaction
+        tx = awe_on_chain.transfer_to_user(wallet_address, amount)
+
+        self.logger.info(f"[{staking_id}] Release staking tx sent: {tx}")
+
+        # Record the tx
+        UserStaking.record_releasing_user_staking_tx(staking_id, user_agent_id, tg_user_id, tx)
+
+        return tx
 
     def get_usage_text(self) -> str:
         usage = "Command usage:\n\n"

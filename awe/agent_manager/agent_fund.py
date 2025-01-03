@@ -10,7 +10,7 @@ import traceback
 from threading import Lock
 from typing import Dict
 from awe.models.utils import unix_timestamp_in_seconds
-from .agent_stats import record_user_withdraw, record_user_payment
+from .agent_stats import record_user_withdraw, record_user_payment, record_user_staking, record_user_staking_release
 
 logger = logging.getLogger("[Agent Fund]")
 
@@ -107,7 +107,7 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
         # Get user wallet info from db
         statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
-
+        wallet_address = user_wallet.address
         # Collect user staking
         tx = awe_on_chain.collect_user_staking(user_wallet.address, amount)
 
@@ -120,17 +120,9 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
         )
 
         session.add(user_staking)
-
-        # Add agent staking pool
-        statement = select(UserAgentData).where(UserAgentData.user_agent_id == agent_id)
-        user_agent_data = session.exec(statement).first()
-        user_agent_data.awe_token_staking = UserAgentData.awe_token_staking + amount
-
-        session.add(user_agent_data)
-
         session.commit()
 
-        # TODO: Staking In Stats
+    record_user_staking(agent_id, wallet_address, amount)
 
 
 def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:
@@ -245,5 +237,7 @@ def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet
         user_staking.release_tx_hash = tx
         session.add(user_staking)
         session.commit()
+
+    record_user_staking_release(agent_id, wallet_address, amount)
 
     return tx

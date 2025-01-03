@@ -1,5 +1,5 @@
 
-from awe.models import TgUserWithdraw, TgUserDeposit, UserAgentStatsTokenTransferDailyCounts, UserAgentStatsPaymentDailyCounts, UserAgentData
+from awe.models import TgUserWithdraw, TgUserDeposit, UserAgentStatsTokenTransferDailyCounts, UserAgentStatsPaymentDailyCounts, UserAgentData, UserAgentStatsStakingDailyCounts
 from awe.models.utils import get_day_as_timestamp
 from .cached_distinct_item_set import CachedDistinctItemSet
 from awe.settings import settings
@@ -31,8 +31,10 @@ def record_user_withdraw(user_agent_id: int, address: str, amount: int):
     # Add token transfer total count
     UserAgentData.add_awe_token_transfer_stats(user_agent_id, amount, is_new_address_total)
 
-def record_user_staking():
-    pass
+def record_user_staking(user_agent_id: int, address: str, amount: int):
+    UserAgentStatsStakingDailyCounts.add_staking(user_agent_id, amount)
+    UserAgentData.add_staking(user_agent_id, amount)
 
-def record_user_staking_release():
-    pass
+def record_user_staking_release(user_agent_id: int, address: str, amount: int):
+    UserAgentStatsStakingDailyCounts.add_releasing(user_agent_id, amount)
+    UserAgentData.release_staking(user_agent_id, amount)

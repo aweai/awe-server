@@ -3,7 +3,7 @@ from typing import Optional, Annotated, List
 from awe.api.dependencies import validate_user_agent
 from sqlmodel import SQLModel, Session, select
 from awe.models.utils import get_day_as_timestamp
-from awe.models import UserAgentStatsInvocationDailyCounts, UserAgentStatsUserDailyCounts, UserAgentStatsTokenTransferDailyCounts, UserAgentStatsPaymentDailyCounts
+from awe.models import UserAgentStatsStakingDailyCounts, UserAgentStatsInvocationDailyCounts, UserAgentStatsUserDailyCounts, UserAgentStatsTokenTransferDailyCounts, UserAgentStatsPaymentDailyCounts
 from awe.db import engine
 
 router = APIRouter(
@@ -154,5 +154,45 @@ def get_user_payments_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_
         response.addresses.append(stats_dict[day]['addresses'])
         response.pool_amounts.append(stats_dict[day]['pool_amounts'])
         response.creator_amounts.append(stats_dict[day]['creator_amounts'])
+
+    return response
+
+
+class StatsUserStakingResponse(SQLModel):
+    days: List[int] = []
+    in_amounts: List[int] = []
+    out_amounts: List[int] = []
+
+
+@router.get("/{agent_id}/user-staking", response_model=Optional[StatsUserStakingResponse])
+def get_user_staking_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_user_agent)]):
+    start_day = get_day_as_timestamp() - days_to_fetch * 86400
+
+    with Session(engine) as session:
+        token_statement = select(UserAgentStatsStakingDailyCounts).where(
+            UserAgentStatsStakingDailyCounts.user_agent_id == agent_id,
+            UserAgentStatsStakingDailyCounts.day >= start_day
+        )
+
+        token_stats = session.exec(token_statement).all()
+
+    response = StatsUserStakingResponse()
+
+    stats_dict = {}
+
+    for day in range(start_day, start_day + (days_to_fetch + 1) * 86400, 86400):
+        response.days.append(day)
+        stats_dict[day] = {
+            'in_amounts': 0,
+            'out_amounts': 0,
+        }
+
+    for stat in token_stats:
+        stats_dict[stat.day]['in_amounts'] = stat.in_amount
+        stats_dict[stat.day]['out_amounts'] = stat.out_amount
+
+    for day in response.days:
+        response.in_amounts.append(stats_dict[day]['in_amounts'])
+        response.out_amounts.append(stats_dict[day]['out_amounts'])
 
     return response

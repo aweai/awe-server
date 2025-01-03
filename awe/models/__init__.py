@@ -4,10 +4,10 @@ from .user_agent_data import UserAgentData
 from .user_agent_stats_invocations import UserAgentStatsInvocations
 from .user_agent_stats_invocation_daily_counts import UserAgentStatsInvocationDailyCounts
 from .user_agent_stats_user_daily_counts import UserAgentStatsUserDailyCounts
-from .user_agent_stats_token_transfers import UserAgentStatsTokenTransfers
 from .user_agent_stats_token_transfer_daily_counts import UserAgentStatsTokenTransferDailyCounts
 from .tg_phantom_used_nonce import TGPhantomUsedNonce
 from .tg_user_deposit import TgUserDeposit
 from .user_agent_user_invocations import UserAgentUserInvocations
 from .user_staking import UserStaking
 from .tg_user_withdraw import TgUserWithdraw
+from .user_agent_stats_payment_daily_counts import UserAgentStatsPaymentDailyCounts

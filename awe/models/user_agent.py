@@ -44,8 +44,8 @@ class UserAgent(SQLModel, table=True):
             if self.awe_agent.awe_token_config is None \
                 or self.awe_agent.awe_token_config.max_token_per_round <= 0 \
                 or self.awe_agent.awe_token_config.max_token_per_tx <= 0 \
-                or self.awe_agent.awe_token_config.max_invocation_per_payment <= 0 \
-                or self.awe_agent.awe_token_config.max_invocation_per_round <= 0 \
+                or self.awe_agent.awe_token_config.max_invocation_per_payment < 0 \
+                or self.awe_agent.awe_token_config.max_invocation_per_round < 0 \
                 or self.awe_agent.awe_token_config.user_price < 10:
 
                 return "Token Distribution is not fully configured!"

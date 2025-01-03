@@ -211,4 +211,4 @@ class PaymentLimitHandler(LimitHandler):
             price
         )
 
-        await update.message.reply_text(f"Pay AWE {self.aweAgent.config.awe_token_config.user_price}.00 to use this Memegent", reply_markup=reply_markup)
+        await update.message.reply_text(f"Pay AWE {price}.00 to use this Memegent", reply_markup=reply_markup)

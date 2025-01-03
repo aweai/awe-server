@@ -1,4 +1,4 @@
-from awe.models import TgUserDeposit, TgUserWithdraw, UserAgentData, UserStaking, TGBotUserWallet, UserAgent, UserAgentStatsTokenTransfers, UserAgentUserInvocations
+from awe.models import TgUserDeposit, TgUserWithdraw, UserAgentData, UserStaking, TGBotUserWallet, UserAgent, UserAgentUserInvocations
 from awe.blockchain import awe_on_chain
 from time import sleep
 from awe.settings import settings
@@ -10,6 +10,7 @@ import traceback
 from threading import Lock
 from typing import Dict
 from awe.models.utils import unix_timestamp_in_seconds
+from .agent_stats import record_user_withdraw, record_user_payment
 
 logger = logging.getLogger("[Agent Fund]")
 
@@ -64,25 +65,10 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
         # Collect user payment
         tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
 
-        # Record the transfer tx
-        user_deposit = TgUserDeposit(
-            user_agent_id=agent_id,
-            tg_user_id=tg_user_id,
-            user_agent_round=user_agent.agent_data.current_round,
-            address=user_wallet.address,
-            amount=amount,
-            tx_hash=tx
-        )
-
-        session.add(user_deposit)
-
-        pool_share, agent_share, _ = settings.tn_share_user_payment(amount)
+        pool_share, _, _ = settings.tn_share_user_payment(amount)
 
         # Add agent pool
         user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
-
-        # Add agent total shares
-        user_agent.agent_data.total_income_shares = UserAgentData.total_income_shares + agent_share
 
         session.add(user_agent.agent_data)
         session.commit()
@@ -93,7 +79,25 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
         if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
             UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
 
-        # TODO: Pool in Stats
+        user_address = user_wallet.address
+
+    # Record stats
+    record_user_payment(agent_id, user_address, amount)
+
+    # Record the transfer tx
+    with Session(engine) as session:
+
+        user_deposit = TgUserDeposit(
+            user_agent_id=agent_id,
+            tg_user_id=tg_user_id,
+            user_agent_round=user_agent.agent_data.current_round,
+            address=user_wallet.address,
+            amount=amount,
+            tx_hash=tx
+        )
+
+        session.add(user_deposit)
+        session.commit()
 
 
 def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
@@ -169,6 +173,9 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
     # Send the transaction
     tx = awe_on_chain.transfer_to_user(user_address, amount)
 
+    # Record stats
+    record_user_withdraw(agent_id, user_address, amount)
+
     # Record the tx
     with Session(engine) as session:
         user_withdraw = TgUserWithdraw(
@@ -181,9 +188,6 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
         )
 
         session.add(user_withdraw)
-
-    # Pool out Stats
-    UserAgentStatsTokenTransfers.add_invocation(agent_id, tg_user_id, user_address, amount)
 
     return tx
 

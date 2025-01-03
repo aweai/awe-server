@@ -136,10 +136,7 @@ class AweOnSolana(AweOnChain):
 
 
     def collect_user_payment(self, user_wallet: str, agent_creator_wallet: str, amount: int) -> str:
-        # Transfer tokens from the user wallet to the system wallet
-        # 69% to the pool (system wallet)
-        # 30% to the agent creator
-        # 1% to the developer
+        # Transfer tokens from the user wallet to the pool, agent creators and developers
         # Return the transaction hash
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_fund',

@@ -12,21 +12,8 @@ logger = logging.getLogger("[Collect User Fund Task]")
 
 @app.task
 def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) -> str:
-    # 69% to the pool (system wallet)
-    # 30% to the agent creator
-    # 1% to the developer
 
-    agent_creator_amount = int(amount * settings.tn_agent_creator_share)
-
-    if agent_creator_amount == 0:
-        agent_creator_amount = 1
-
-    developer_amount = int(amount * settings.tn_developer_share)
-
-    if developer_amount == 0:
-        developer_amount = 1
-
-    pool_amount = amount - agent_creator_amount - developer_amount
+    pool_amount, agent_creator_amount, developer_amount = settings.tn_share_user_payment(amount)
 
     logger.info(f"collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")
 
@@ -60,7 +47,7 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
     logger.debug(f"source: {str(user_associated_token_account)}, system: {str(system_payer_associated_token_account)}, agent creator: {str(agent_creator_associated_token_account)}")
     logger.debug(f"signer: {str(system_payer.pubkey())}")
 
-    # 69% to the pool
+    # to the pool
     ix_user = spl_token.transfer_checked(spl_token.TransferCheckedParams(
         source=user_associated_token_account,
         dest=system_payer_associated_token_account,
@@ -71,7 +58,7 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
         program_id=TOKEN_2022_PROGRAM_ID
     ))
 
-    # 30% to the agent creator
+    # to the agent creator
     ix_agent_creator = spl_token.transfer_checked(spl_token.TransferCheckedParams(
         source=user_associated_token_account,
         dest=agent_creator_associated_token_account,
@@ -82,7 +69,7 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
         program_id=TOKEN_2022_PROGRAM_ID
     ))
 
-    # %1 to the developer
+    # to the developer
     ix_developer = spl_token.transfer_checked(spl_token.TransferCheckedParams(
         source=user_associated_token_account,
         dest=developer_associated_token_account,

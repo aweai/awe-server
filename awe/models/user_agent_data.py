@@ -7,12 +7,23 @@ from awe.db import engine
 class UserAgentData(SQLModel, table=True):
     id: int | None = Field(primary_key=True, default=None)
     user_agent_id: int = Field(unique=True, nullable=False, foreign_key="useragent.id")
+
+    # Agent state
     awe_token_round_transferred: int = Field(default=0)
     current_round: Optional[int] = Field(default=1, nullable=True)
 
+    # Game pool
     awe_token_quote: int = Field(default=0)
+
+    # Staking pool
+    awe_token_staking: int = Field(default=0, nullable=True)
+
+    # Statistics
     total_invocations: int = Field(default=0)
     total_users: int = Field(default=0)
+
+    total_emissions: int = Field(default=0, nullable=True)
+    total_income_shares: int = Field(default=0, nullable=True)
 
     awe_token_total_transferred: int = Field(default=0)
     awe_token_total_transactions: int = Field(default=0)
@@ -23,29 +34,6 @@ class UserAgentData(SQLModel, table=True):
         with Session(engine) as session:
             statement = select(UserAgentData).where(UserAgentData.user_agent_id == user_agent_id)
             user_agent_data = session.exec(statement).first()
-            return user_agent_data
-
-    @classmethod
-    def add_awe_token_transferred(cls, user_agent_id: int, amount: int) -> Self:
-        with Session(engine) as session:
-            statement = select(UserAgentData).where(UserAgentData.user_agent_id == user_agent_id)
-            user_agent_data = session.exec(statement).first()
-            if user_agent_data is None:
-                raise Exception("User agent data not exist")
-
-            if user_agent_data.awe_token_quote < amount:
-                raise Exception("Not enough quote left")
-
-            # Update round data
-            user_agent_data.awe_token_round_transferred = UserAgentData.awe_token_round_transferred + amount
-
-            # Update quote
-            user_agent_data.awe_token_quote = UserAgentData.awe_token_quote - amount
-
-            session.add(user_agent_data)
-            session.commit()
-            session.refresh(user_agent_data)
-
             return user_agent_data
 
     @classmethod

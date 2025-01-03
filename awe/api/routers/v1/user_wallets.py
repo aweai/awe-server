@@ -1,11 +1,11 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks
 from awe.blockchain.phantom import verify_comm_signature, verify_solana_signature
 from solders.pubkey import Pubkey
 from sqlmodel import Session, select
 from awe.db import engine
 from awe.models import TGBotUserWallet
-from .tg_phantom_wallets import collect_user_fund
+from awe.agent_manager.agent_fund import collect_user_fund
 
 logger = logging.getLogger("[Wallet API]")
 

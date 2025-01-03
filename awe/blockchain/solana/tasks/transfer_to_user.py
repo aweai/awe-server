@@ -61,7 +61,7 @@ def transfer_to_user(user_wallet: str, amount: int):
         source=source_associated_token_account_pubkey,
         dest=dest_associated_token_account_pubkey,
         owner=system_payer,
-        amount=amount,
+        amount=int(amount * 1e9),
         decimals=9
     )
 

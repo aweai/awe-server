@@ -26,6 +26,3 @@ class AweTokenTool(BaseTool):
 
     async def get_agent_data(self) -> Optional[UserAgentData]:
         return await asyncio.to_thread(UserAgentData.get_user_agent_data_by_id, self.user_agent_id)
-
-    async def add_agent_round_transferred_awe(self, amount: int) -> UserAgentData:
-        return await asyncio.to_thread(UserAgentData.add_awe_token_transferred, self.user_agent_id, amount)

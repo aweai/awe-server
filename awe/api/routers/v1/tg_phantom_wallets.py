@@ -1,23 +1,23 @@
 from typing import Annotated
 from fastapi import APIRouter, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse
-from awe.blockchain import awe_on_chain
+
 from awe.blockchain.phantom import decrypt_phantom_data, verify_comm_signature, verify_solana_signature
 from sqlmodel import Session, select
-from sqlalchemy.orm import load_only, joinedload
+from sqlalchemy.orm import load_only
 from awe.db import engine
 from awe.models.tg_phantom_used_nonce import TGPhantomUsedNonce
 from awe.models.tg_bot_user_wallet import TGBotUserWallet
-from awe.models.user_agent_user_invocations import UserAgentUserInvocations
+
 from awe.blockchain.phantom import get_wallet_verification_url
 from awe.models.user_agent import UserAgent
-from awe.models import TgUserDeposit, UserAgentData, UserStaking
+
 from solders.pubkey import Pubkey
 import json
 import logging
 import traceback
-import asyncio
-from awe.settings import settings
+
+from awe.agent_manager.agent_fund import collect_user_fund
 
 logger = logging.getLogger("[Phantom Wallet API]")
 
@@ -304,76 +304,3 @@ def decrypt_payload(agent_id: int, tg_user_id: str, nonce: str, data: str) -> di
         logger.error(e)
         logger.error(traceback.format_exc())
         return {"errorMessage": "Phantom data decryption failed!"}
-
-
-async def collect_user_fund(
-    action: str,
-    amount: int,
-    agent_id: int,
-    tg_user_id: str,
-    approve_tx: str,
-):
-    # Wait for the finalize of the approve tx before
-    await asyncio.sleep(20)
-
-    try:
-        # Wait for the approve tx to be confirmed before next step
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
-
-        with Session(engine) as session:
-            # Get user wallet info from db
-            statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
-            user_wallet = session.exec(statement).first()
-
-            if action == "user_payment":
-                # Get agent user price from db
-                statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-                user_agent = session.exec(statement).first()
-
-                # Collect user payment
-                amount = user_agent.awe_agent.awe_token_config.user_price
-                tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
-
-                # Record the transfer tx
-                user_deposit = TgUserDeposit(
-                    user_agent_id=agent_id,
-                    tg_user_id=tg_user_id,
-                    user_agent_round=user_agent.agent_data.current_round,
-                    address=user_wallet.address,
-                    amount=amount,
-                    tx_hash=tx
-                )
-
-                session.add(user_deposit)
-
-                # Add Memegent pool balance
-                pool_amount = amount - int(settings.tn_agent_creator_share * amount)
-                user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_amount
-
-                session.add(user_agent.agent_data)
-                session.commit()
-
-                session.refresh(user_agent)
-
-                # Reset user payment invocation count
-                if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
-                    UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
-
-            elif action == "user_staking":
-                # Collect user staking
-                tx = awe_on_chain.collect_user_staking(user_wallet.address, amount)
-
-                # Record the transfer tx
-                user_staking = UserStaking(
-                    tg_user_id=tg_user_id,
-                    user_agent_id=agent_id,
-                    amount=amount,
-                    tx_hash=tx
-                )
-
-                session.add(user_staking)
-                session.commit()
-
-    except Exception as e:
-        logger.error(e)
-        logger.error(traceback.format_exc())

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import model_validator, Field
 import logging
 import enum
-from typing import Optional, Annotated
+from typing import Optional, Annotated, Tuple
 from typing_extensions import Self
 from solders.keypair import Keypair
 import os
@@ -85,6 +85,22 @@ class AweSettings(BaseSettings):
     tn_agent_staking_amount: Annotated[int, Field(default=100, gt=0)]
     tn_agent_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
     tn_user_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
+
+    def tn_share_user_payment(self, amount: int) -> Tuple[int, int, int]:
+        creator_share = int(amount * self.tn_agent_creator_share)
+        if creator_share == 0:
+            creator_share = 1
+
+        developer_share = int(amount * self.tn_developer_share)
+        if developer_share == 0:
+            developer_share = 1
+
+        pool_share = amount - creator_share - developer_share
+
+        if pool_share <= 0:
+            raise Exception("Payment amount too small for the pool!")
+
+        return pool_share, creator_share, developer_share
 
     @model_validator(mode="after")
     def openai_api_key_exist(self) -> Self:

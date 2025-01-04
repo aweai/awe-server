@@ -11,22 +11,27 @@ services:
   server:
     image: awe:dev
     container_name: awe_server
-    restart: always
-    command:
-      - AWE_KEEP_ENV_FILE=True /app/venv/bin/python -m alembic upgrade head
-      - AWE_KEEP_ENV_FILE=False /app/venv/bin/python run.py
+    restart: no
+    command: /app/venv/bin/python run.py
     volumes:
       - "./persisted_data:/app/persisted_data"
       - "./models:/app/models"
     ports:
       - '7777:7777'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    depends_on:
+      db_migration:
+        condition: service_completed_successfully
+
+  db_migration:
+    image: awe:dev
+    container_name: db_migration
+    restart: no
+    environment:
+      AWE_KEEP_ENV_FILE: True
+    command: /app/venv/bin/python -m alembic upgrade head
+    volumes:
+      - "./persisted_data:/app/persisted_data"
+
   worker_llm:
     image: awe:dev
     container_name: awe_worker_llm
@@ -47,18 +52,26 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
-  # worker_sd:
-  #   image: awe:dev
-  #   container_name: awe_worker_sd
-  #   restart: always
-  #   command: /app/venv/bin/python -m celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=sd --pool=solo
-  #   volumes:
-  #     - "./persisted_data:/app/persisted_data"
-  #     - "./models:/app/models"
-  #   deploy:
-  #       resources:
-  #         reservations:
-  #           devices:
-  #             - driver: nvidia
-  #               count: all
-  #               capabilities: [gpu]
+  worker_sd:
+    image: awe:dev
+    container_name: awe_worker_sd
+    restart: always
+    command: /app/venv/bin/python -m celery -A awe.awe_agent.worker worker --loglevel=INFO --queues=sd --pool=solo
+    volumes:
+      - "./persisted_data:/app/persisted_data"
+      - "./models:/app/models"
+    deploy:
+        resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                count: all
+                capabilities: [gpu]
+
+  signer:
+    image: awe:dev
+    container_name: awe_signer
+    restart: always
+    command: /app/venv/bin/python -m celery -A awe.blockchain.worker worker --loglevel=INFO --queues=tx_token_in,tx_token_out --concurrency=10
+    volumes:
+      - "./persisted_data:/app/persisted_data"

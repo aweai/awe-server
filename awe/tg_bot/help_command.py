@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = "Commands:\n\n\n"
 

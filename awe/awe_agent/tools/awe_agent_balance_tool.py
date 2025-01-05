@@ -23,7 +23,7 @@ class AweAgentBalanceTool(AweTokenTool):
         agent_data = await self.get_agent_data()
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.AGENT_POOL_QUERY)
 
-        return f"{agent_data.awe_token_quote}"
+        return f"AWE {agent_data.awe_token_quote}.00"
 
     def _run(self, _: str) -> str:
         raise Exception("Sync call should never be used")

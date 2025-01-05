@@ -16,6 +16,7 @@ class AITools(str, Enum):
     SD = 'SD'
     TOKEN_QUERY = 'TOKEN_QUERY'
     TOKEN_TRANSFER = 'TOKEN_TRANSFER'
+    AGENT_POOL_QUERY = 'AGENT_POOL_QUERY'
 
 class UsersIdSet:
 

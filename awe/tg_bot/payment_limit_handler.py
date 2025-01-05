@@ -211,4 +211,4 @@ class PaymentLimitHandler(LimitHandler):
             price
         )
 
-        await update.message.reply_text(f"Pay AWE {price}.00 to use this Memegent", reply_markup=reply_markup)
+        await update.message.reply_text(f"Pay AWE {price}.00 to use this Memegent.\n\nThe payment takes some time to confirm after you finish the process.\nUse /chances command to check if your limit has been reset.", reply_markup=reply_markup)

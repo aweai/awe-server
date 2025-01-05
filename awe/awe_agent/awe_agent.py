@@ -60,14 +60,14 @@ class AweAgent:
 
     Add the word "STOP" after each markdown snippet. Example:
 
-    ----------------- Example Begin ------------------
+    [Example Begin]
     ```json
     {{"thought": "<your thoughts>",
     "action": "<tool name or Final Answer to give a final answer>",
     "action_input": "<tool parameters or the final output"}}
     ```
     STOP
-    ----------------- Example End --------------------
+    [Example End]
 
     No matter what the input is, the output rule must always be strictly followed:
     ALWAYS RETURN JSON as show in the example with nothing else, since the output will be parsed as JSON using the code.
@@ -76,6 +76,7 @@ class AweAgent:
     """
 
     human_prompt="""
+    The user input could be given in either group chat mode or private chat mode. Give proper answers according to the chat mode.
     This is my query="{input}". Write only the next step needed to solve it. Remember to add STOP after each JSON snippet.
     """
 

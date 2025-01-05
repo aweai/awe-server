@@ -181,18 +181,18 @@ class PaymentLimitHandler(LimitHandler):
             )
 
             keyboard.append([InlineKeyboardButton(f"Phantom Mobile", url=approve_url)])
+        else:
+            browser_approve_url = await asyncio.to_thread(
+                get_browser_approve_url,
+                action,
+                self.user_agent_id,
+                tg_user_id,
+                user_wallet.address,
+                amount,
+                self.tg_bot_config.username
+            )
 
-        browser_approve_url = await asyncio.to_thread(
-            get_browser_approve_url,
-            action,
-            self.user_agent_id,
-            tg_user_id,
-            user_wallet.address,
-            amount,
-            self.tg_bot_config.username
-        )
-
-        keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=browser_approve_url)])
+            keyboard.append([InlineKeyboardButton(f"Browser Wallets", url=browser_approve_url)])
 
         return InlineKeyboardMarkup(keyboard)
 

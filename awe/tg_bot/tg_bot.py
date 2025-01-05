@@ -12,6 +12,7 @@ from ..models.tg_bot import TGBot as TGBotConfig
 from .payment_limit_handler import PaymentLimitHandler
 from .round_limit_handler import RoundLimitHandler
 from .staking_handler import StakingHandler
+from .help_command import help_command
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -52,6 +53,10 @@ class TGBot:
         # Staking command
         staking_command_handler = CommandHandler("staking", self.staking_handler.staking_command)
         self.application.add_handler(staking_command_handler)
+
+        # Help command
+        help_command_handler = CommandHandler("help", help_command)
+        self.application.add_handler(help_command_handler)
 
         # Message handler
         message_handler = MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT & (~filters.COMMAND), self.respond_message)

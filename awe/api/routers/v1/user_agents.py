@@ -76,6 +76,9 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
         if user_agent.awe_agent is not None:
             user_agent.awe_agent = AweAgent.model_validate(user_agent.awe_agent)
 
+        # Token must be enabled for now
+        user_agent.awe_agent.awe_token_enabled = True
+
         # Validate ImageGenrationArgs manually
         # since we can not use the Pydantic model of ImageGenrationArgs here inside SQLModel
         if user_agent.awe_agent is None or user_agent.awe_agent.image_generation_args is None:

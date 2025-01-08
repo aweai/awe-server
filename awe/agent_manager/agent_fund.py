@@ -61,19 +61,20 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
 
         # We will use the agent price as the amount here
         amount = user_agent.awe_agent.awe_token_config.user_price
+        game_pool_division = user_agent.awe_agent.awe_token_config.game_pool_division
 
         # Collect user payment
-        tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount)
+        tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount, game_pool_division)
 
-        pool_share, _, _ = settings.tn_share_user_payment(amount)
+        pool_share, creator_share, _ = settings.tn_share_user_payment(game_pool_division, amount)
 
-        # Add agent pool
-        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
+        if pool_share != 0:
+            # Add agent pool
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
 
-        session.add(user_agent.agent_data)
-        session.commit()
-
-        session.refresh(user_agent)
+            session.add(user_agent.agent_data)
+            session.commit()
+            session.refresh(user_agent)
 
         # Reset user payment invocation count
         if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
@@ -82,7 +83,7 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
         user_address = user_wallet.address
 
     # Record stats
-    record_user_payment(agent_id, user_address, amount)
+    record_user_payment(agent_id, user_address, pool_share, creator_share)
 
     # Record the transfer tx
     with Session(engine) as session:

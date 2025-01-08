@@ -11,9 +11,9 @@ from awe.settings import settings
 logger = logging.getLogger("[Collect User Fund Task]")
 
 @app.task
-def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) -> str:
+def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
 
-    pool_amount, agent_creator_amount, developer_amount = settings.tn_share_user_payment(amount)
+    pool_amount, agent_creator_amount, developer_amount = settings.tn_share_user_payment(game_pool_division, amount)
 
     logger.info(f"collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")
 
@@ -47,27 +47,35 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
     logger.debug(f"source: {str(user_associated_token_account)}, system: {str(system_payer_associated_token_account)}, agent creator: {str(agent_creator_associated_token_account)}")
     logger.debug(f"signer: {str(system_payer.pubkey())}")
 
-    # to the pool
-    ix_user = spl_token.transfer_checked(spl_token.TransferCheckedParams(
-        source=user_associated_token_account,
-        dest=system_payer_associated_token_account,
-        owner=system_payer.pubkey(),
-        amount=int(pool_amount * 1e9),
-        decimals=9,
-        mint=awe_mint_public_key,
-        program_id=TOKEN_2022_PROGRAM_ID
-    ))
+    ixs = []
 
-    # to the agent creator
-    ix_agent_creator = spl_token.transfer_checked(spl_token.TransferCheckedParams(
-        source=user_associated_token_account,
-        dest=agent_creator_associated_token_account,
-        owner=system_payer.pubkey(),
-        amount=int(agent_creator_amount * 1e9),
-        decimals=9,
-        mint=awe_mint_public_key,
-        program_id=TOKEN_2022_PROGRAM_ID
-    ))
+    if pool_amount != 0:
+
+        # to the pool
+        ix_pool = spl_token.transfer_checked(spl_token.TransferCheckedParams(
+            source=user_associated_token_account,
+            dest=system_payer_associated_token_account,
+            owner=system_payer.pubkey(),
+            amount=int(pool_amount * 1e9),
+            decimals=9,
+            mint=awe_mint_public_key,
+            program_id=TOKEN_2022_PROGRAM_ID
+        ))
+
+        ixs.append(ix_pool)
+
+    if agent_creator_amount != 0:
+        # to the agent creator
+        ix_agent_creator = spl_token.transfer_checked(spl_token.TransferCheckedParams(
+            source=user_associated_token_account,
+            dest=agent_creator_associated_token_account,
+            owner=system_payer.pubkey(),
+            amount=int(agent_creator_amount * 1e9),
+            decimals=9,
+            mint=awe_mint_public_key,
+            program_id=TOKEN_2022_PROGRAM_ID
+        ))
+        ixs.append(ix_agent_creator)
 
     # to the developer
     ix_developer = spl_token.transfer_checked(spl_token.TransferCheckedParams(
@@ -79,11 +87,12 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int) 
         mint=awe_mint_public_key,
         program_id=TOKEN_2022_PROGRAM_ID
     ))
+    ixs.append(ix_developer)
 
     recent_blockhash = http_client.get_latest_blockhash().value.blockhash
 
     tx = Transaction.new_signed_with_payer(
-        [ix_user, ix_agent_creator, ix_developer],
+        ixs,
         system_payer.pubkey(),
         [system_payer],
         recent_blockhash

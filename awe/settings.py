@@ -80,24 +80,29 @@ class AweSettings(BaseSettings):
     remove_env_file: bool = True
 
     # Tokenomics
-    tn_agent_creator_share: Annotated[float, Field(default=0.3, gt=0, le=1)]
     tn_developer_share: Annotated[float, Field(default=0.01, gt=0, le=1)]
     tn_agent_staking_amount: Annotated[int, Field(default=100, gt=0)]
     tn_agent_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
     tn_user_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
 
-    def tn_share_user_payment(self, amount: int) -> Tuple[int, int, int]:
-        creator_share = int(amount * self.tn_agent_creator_share)
-        if creator_share == 0:
-            creator_share = 1
+    def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 
+        # Developer division
         developer_share = int(amount * self.tn_developer_share)
         if developer_share == 0:
             developer_share = 1
 
-        pool_share = amount - creator_share - developer_share
+        remaining = amount - developer_share
 
-        if pool_share <= 0:
+        # Creator division
+        creator_share = int(remaining * (100 - game_pool_division) / 100)
+        if game_pool_division != 100 and creator_share == 0:
+            creator_share = 1
+
+        # Pool division
+        pool_share = remaining - creator_share
+
+        if pool_share < 0:
             raise Exception("Payment amount too small for the pool!")
 
         return pool_share, creator_share, developer_share

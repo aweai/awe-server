@@ -44,11 +44,8 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def collect_user_payment(self, user_wallet: str, agent_creator_wallet: str, amount: int) -> str:
+    def collect_user_payment(self, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
         # Transfer tokens from the user wallet to the system wallet
-        # 69% to the pool (system wallet)
-        # 30% to the agent creator
-        # 1% to the developer
         # Return the transaction hash
         pass
 

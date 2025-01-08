@@ -3,7 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from awe.models import TGBotUserWallet, TgUserDeposit, UserAgentUserInvocations
 from awe.blockchain.phantom import get_connect_url, get_approve_url, get_browser_connect_url, get_browser_approve_url
-from typing import Optional
+from typing import Optional, Tuple
 from awe.blockchain import awe_on_chain
 import asyncio
 import logging
@@ -91,22 +91,21 @@ class PaymentLimitHandler(LimitHandler):
 
                 user_invocation = await asyncio.to_thread(UserAgentUserInvocations.get_user_invocation, self.user_agent_id, user_id)
 
-                if user_invocation is None:
-                    # Not invocation yet
-                    return True
-
                 if user_invocation.payment_invocations >= self.aweAgent.config.awe_token_config.max_invocation_per_payment:
 
-                    if not is_group_chat:
-                        await self.ask_for_payment(update, context, user_id, user_wallet)
+                    if self.aweAgent.config.awe_token_config.max_payment_per_round == 0 or user_invocation.round_payments < self.aweAgent.config.awe_token_config.max_payment_per_round:
+                        if not is_group_chat:
+                            await self.ask_for_payment(update, context, user_id, user_wallet)
+                        else:
+                            await update.message.reply_text(f"Please DM me to pay first.")
                     else:
-                        await update.message.reply_text(f"Please DM me to pay first.")
+                        await update.message.reply_text("You have reached the limit of this round. Please wait for the next round.")
 
                     return False
 
         return True
 
-    async def get_payment_chances(self, update:Update) -> int:
+    async def get_payment_chances(self, update:Update) -> Tuple[int, int]:
 
         user_id = self.get_tg_user_id_from_update(update)
         if user_id is None:
@@ -127,11 +126,17 @@ class PaymentLimitHandler(LimitHandler):
         if user_invocation is None:
             return self.aweAgent.config.awe_token_config.max_invocation_per_payment
         else:
-            chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
+            invocation_chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
 
-            if chances <= 0:
-                return 0
-            return chances
+            if invocation_chances <= 0:
+                invocation_chances = 0
+
+            payment_chances = self.aweAgent.config.awe_token_config.max_payment_per_round - user_invocation.round_payments
+
+            if payment_chances <= 0:
+                payment_chances = 0
+
+            return invocation_chances, payment_chances
 
     async def check_user_balance(self, address: str, minimum: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         # Check the user balance
@@ -142,11 +147,11 @@ class PaymentLimitHandler(LimitHandler):
 
         if user_balance_int < minimum:
 
-            msg = f"You don't have enough AWE tokens to pay ({address}: {user_balance_int}.00)."
+            msg = f"You don't have enough $AWE to pay ({address}: {user_balance_int}.00)."
             if minimum > 0:
-                msg = msg + f"Transfer {minimum}.00 AWE to your wallet to begin."
+                msg = msg + f"Transfer {minimum}.00 $AWE to your wallet to begin."
             else:
-                msg = msg + f"Transfer some AWE to your wallet to begin."
+                msg = msg + f"Transfer some $AWE to your wallet to begin."
 
             await update.message.reply_text(msg)
 
@@ -211,4 +216,9 @@ class PaymentLimitHandler(LimitHandler):
             price
         )
 
-        await update.message.reply_text(f"Pay AWE {price}.00 to use this Memegent.\n\nThe payment takes some time to confirm after you finish the process.\nUse /chances command to check if your limit has been reset.", reply_markup=reply_markup)
+        msg = f"Pay $AWE {price}.00 to use this Memegent.\n\n"
+        msg = msg + "Click the button below to start the payment process."
+        msg = msg + "The payment takes some time to confirm after you finish.\n\n"
+        msg = msg + "Please use /chances command to check if the payment is confirmed."
+
+        await update.message.reply_text(msg, reply_markup=reply_markup)

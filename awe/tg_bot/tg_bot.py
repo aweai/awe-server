@@ -10,7 +10,6 @@ import asyncio
 from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from .payment_limit_handler import PaymentLimitHandler
-from .round_limit_handler import RoundLimitHandler
 from .staking_handler import StakingHandler
 from .help_command import help_command
 
@@ -39,9 +38,6 @@ class TGBot:
 
         wallet_command_handler = CommandHandler('wallet', self.payment_limit_handler.wallet_command)
         self.application.add_handler(wallet_command_handler)
-
-        # Round limit handler
-        self.round_limit_handler = RoundLimitHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
 
         # Chances command
         chances_handler = CommandHandler("chances", self.chances_command)
@@ -80,20 +76,17 @@ class TGBot:
             await self.send_response(resp, update, context)
 
     async def chances_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if self.aweAgent.config.awe_token_config.max_invocation_per_round == 0 \
-            and self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
-
+        if self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="This Memegent has no invocation limit.")
         else:
-            msg = ""
-            if self.aweAgent.config.awe_token_config.max_invocation_per_round != 0:
-                chances = await self.round_limit_handler.get_round_chances(update)
-                msg = msg + f"{chances} left for this round."
-            if self.aweAgent.config.awe_token_config.max_invocation_per_payment != 0:
-                chances = await self.payment_limit_handler.get_payment_chances(update)
-                if msg != "":
-                    msg = msg + "\n"
-                msg = msg + f"{chances} left for this payment. Reset by paying again."
+            invocation_chances, payment_chances = await self.payment_limit_handler.get_payment_chances(update)
+
+            msg = f"{invocation_chances} messages left for this play."
+
+            if self.aweAgent.config.awe_token_config.max_payment_per_round != 0:
+                msg = msg + f"\n\n{payment_chances} payment chances left for this round."
+            else:
+                msg = msg + "\n\nReset by paying again."
 
             await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
@@ -122,9 +115,6 @@ class TGBot:
         return "\n".join(self.group_chat_contents[chat_id])
 
     async def check_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
-        # Check round limit
-        if not await self.round_limit_handler.check_round_limit(update, context):
-            return False
 
         # Check payment limit
         if self.aweAgent.config.awe_token_enabled:
@@ -134,8 +124,7 @@ class TGBot:
         return True
 
     async def increase_invocation(self, tg_user_id: str):
-        user_agent_data = await asyncio.to_thread(UserAgentData.get_user_agent_data_by_id, self.user_agent_id)
-        await asyncio.to_thread(UserAgentUserInvocations.add_invocation, self.user_agent_id, tg_user_id, user_agent_data.current_round)
+        await asyncio.to_thread(UserAgentUserInvocations.add_invocation, self.user_agent_id, tg_user_id)
 
     async def respond_dm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 

@@ -45,7 +45,7 @@ class UserAgent(SQLModel, table=True):
                 or self.awe_agent.awe_token_config.max_token_per_round <= 0 \
                 or self.awe_agent.awe_token_config.max_token_per_tx <= 0 \
                 or self.awe_agent.awe_token_config.max_invocation_per_payment < 0 \
-                or self.awe_agent.awe_token_config.max_invocation_per_round < 0 \
+                or self.awe_agent.awe_token_config.max_payment_per_round < 0 \
                 or self.awe_agent.awe_token_config.user_price < 10 \
                 or self.awe_agent.awe_token_config.game_pool_division < 0 \
                 or self.awe_agent.awe_token_config.game_pool_division > 100:

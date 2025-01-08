@@ -11,7 +11,7 @@ class AweTokenConfig(MutableSABaseModel):
     user_price: int = Field(default=100)
     max_token_per_tx: int = Field(default=0)
     max_token_per_round: int = Field(default=0)
-    max_invocation_per_round: int = Field(default=0)
+    max_payment_per_round: int = Field(default=0)
     max_invocation_per_payment: int = Field(default=0)
     game_pool_division: Annotated[int, Field(default=70, ge=0, le=100)] = 70
 

@@ -4,6 +4,7 @@ from awe.models.user_agent import UserAgent
 from awe.models.user_agent_data import UserAgentData
 from awe.models.tg_bot import TGBot
 from awe.models.awe_agent import AweAgent, LLMConfig
+from awe.models.game_pool_charge import GamePoolCharge
 from awe.db import engine
 from sqlmodel import Session, select, func, col, SQLModel
 from ...dependencies import get_current_user, validate_user_agent
@@ -294,3 +295,42 @@ def return_agent_staking(creator_address: str, amount: int):
     logger.info(f"Returning agent staking {creator_address}: {amount}")
     amount_full = int(int(amount) * int(1e9))
     awe_on_chain.transfer_to_user(creator_address, amount_full)
+
+
+@router.post("/{agent_id}/game-pool")
+def charge_game_pool(agent_id: int, amount:int, tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+    background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
+
+
+def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
+
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 20)
+
+    with Session(engine) as session:
+        statement = select(UserAgent).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at.is_(None)
+        )
+
+        user_agent = session.exec(statement).first()
+        if user_agent is None:
+            return None
+
+        collect_tx = awe_on_chain.collect_game_pool_charge(user_address, amount)
+
+        # Record the transfer tx
+        game_pool_charge = GamePoolCharge(
+            user_agent_id=agent_id,
+            address=user_address,
+            amount=amount,
+            tx_hash=collect_tx
+        )
+
+        session.add(game_pool_charge)
+
+        # Update the game pool
+        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
+        session.add(user_agent.agent_data)
+
+        session.commit()

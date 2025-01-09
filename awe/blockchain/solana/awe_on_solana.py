@@ -145,6 +145,15 @@ class AweOnSolana(AweOnChain):
         self.logger.info("Sent collect user payment task to the queue")
         return task.get()
 
+    def collect_game_pool_charge(self, agent_creator_wallet: str, amount: int) -> str:
+        task = app.send_task(
+            name='awe.blockchain.solana.tasks.collect_user_fund.collect_game_pool_charge',
+            args=(agent_creator_wallet, amount)
+        )
+
+        self.logger.info("Sent collect game pool charge task to the queue")
+        return task.get()
+
 
     def collect_user_staking(self, user_wallet: str, amount: int) -> str:
         # Transfer tokens from the user wallet to the system wallet

@@ -10,5 +10,6 @@ app = Celery(
         "awe.awe_agent.tasks.sd_task.sd": {"queue": "sd"},
         'awe.blockchain.solana.tasks.collect_user_fund.collect_user_fund': {"queue": "tx_token_in"},
         'awe.blockchain.solana.tasks.collect_user_fund.collect_user_staking': {"queue": "tx_token_in"},
+        'awe.blockchain.solana.tasks.collect_user_fund.collect_game_pool_charge': {"queue": "tx_token_in"},
         'awe.blockchain.solana.tasks.transfer_to_user.transfer_to_user': {"queue": "tx_token_out"},
     })

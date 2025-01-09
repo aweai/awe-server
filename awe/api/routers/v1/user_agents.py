@@ -14,6 +14,8 @@ from PIL import Image
 from awe.models.utils import unix_timestamp_in_seconds
 from awe.settings import settings
 import logging
+import re
+
 
 logger = logging.getLogger("[User Agents API]")
 
@@ -78,6 +80,10 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
 
         # Token must be enabled for now
         user_agent.awe_agent.awe_token_enabled = True
+
+        # Validate agent prompt
+        if re.search("\{|\}", user_agent.awe_agent.llm_config.prompt_preset) is not None:
+            raise Exception("Invalid LLM prompt")
 
         # Validate ImageGenrationArgs manually
         # since we can not use the Pydantic model of ImageGenrationArgs here inside SQLModel

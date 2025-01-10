@@ -34,6 +34,10 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
 
         tg_user_id = metadata["tg_user_id"]
 
+        # Print the debug log
+        if settings.log_level == "DEBUG":
+            logger.debug("|||".join(prompts))
+
         # Log the invocation
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
 
@@ -41,8 +45,10 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
 class AweAgent:
 
     system_prompt="""
+    The user will define your behavior in the USER prompt given below.
+    You should become the character defined in the USER prompt to play games with the players, following exactly as the USER prompt instructed.
 
-    Beside answer user question directly, there are some tools you can use:
+    Beside giving text answers directly, there are some tools you can use:
 
     {tool_names}
 
@@ -59,7 +65,7 @@ class AweAgent:
     action_input -> parameters to send to the tool
 
     If giving direct text answering, use the tool "Final Answer". Its parameter is the text given to users.
-    If structured output is required in the prompt above, the structured output should also be converted to a string and given to the "Final Answer" tool as parameter.
+    If structured output is required in the USER prompt, the structured output should also be converted to a string and given to the "Final Answer" tool as parameter.
     If there is not enough information, try to give the final answer at your best knowledge.
 
     Add the word "STOP" after each markdown snippet. Example:
@@ -80,8 +86,10 @@ class AweAgent:
     """
 
     human_prompt="""
-    The user input could be given in either group chat mode or private chat mode. Give proper answers according to the chat mode.
-    This is my query="{input}". Write only the next step needed to solve it. Remember to add STOP after each JSON snippet.
+
+    The player input could be given in either group chat mode or private chat mode. Give proper answers according to the chat mode, but do not mention the chat mode, such as "private chat" and "group chat" in the response, do not use the words.
+
+    This is the player's query="{input}". Write only the next step needed to solve it. Remember to add STOP after each JSON snippet.
     """
 
     def __init__(self, user_agent_id: int, config: AgentConfig) -> None:
@@ -157,9 +165,9 @@ class AweAgent:
     def _build_prompt_template(self, agent_preset_prompt: str) -> ChatPromptTemplate:
         return ChatPromptTemplate.from_messages(
             [
-                ("system", agent_preset_prompt + self.system_prompt),
+                ("system",  self.system_prompt),
+                ("human", agent_preset_prompt + self.human_prompt),
                 MessagesPlaceholder("chat_history", optional=True),
-                ("human", self.human_prompt),
                 MessagesPlaceholder("agent_scratchpad"),
             ]
         )

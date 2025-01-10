@@ -14,6 +14,8 @@ from .staking_handler import StakingHandler
 from .help_command import help_command
 from .balance_handler import BalanceHandler
 from .power_command import power_command
+from pathlib import Path
+from datetime import datetime
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -137,6 +139,7 @@ class TGBot:
     async def increase_invocation(self, tg_user_id: str):
         await asyncio.to_thread(UserAgentUserInvocations.add_invocation, self.user_agent_id, tg_user_id)
 
+
     async def respond_dm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not await self.check_limits(update, context, False):
@@ -144,14 +147,18 @@ class TGBot:
 
         user_id = str(update.effective_user.id)
 
+        input = "[Private chat] " + update.message.text
+
         resp = await self.aweAgent.get_response(
-            "[Private chat] " + update.message.text,
+            input,
             user_id,
             user_id)
 
-        await self.increase_invocation(user_id)
-
         await self.send_response(resp, update, context)
+
+        await self.increase_invocation(user_id)
+        await asyncio.to_thread(self.log_interact, user_id, str(update.effective_chat.id), input, resp)
+
 
     async def respond_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -174,14 +181,16 @@ class TGBot:
             user_id = str(update.effective_user.id)
             history_messages = await asyncio.to_thread(self.get_group_chat_history, chat_id)
 
+            input = "[Group chat] " + history_messages + "\n" + update.message.text
+
             resp = await self.aweAgent.get_response(
-                "[Group chat] " + history_messages + "\n" + update.message.text,
+                input,
                 user_id
             )
+            await self.send_response(resp, update, context)
 
             await self.increase_invocation(user_id)
-
-            await self.send_response(resp, update, context)
+            await asyncio.to_thread(self.log_interact, user_id, chat_id, input, resp)
 
         else:
             # Record last 5 messages in the channel for agent respond context
@@ -209,6 +218,34 @@ class TGBot:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=resp["text"])
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="My brain is messed up...try me again")
+
+
+    def log_interact(self, tg_user_id: str, chat_id: str, input: str, output: str | dict):
+        day_folder = datetime.today().strftime('%Y-%m-%d')
+        user_folder = Path("persisted_data") / "chats" / day_folder / tg_user_id
+        agent_folder = user_folder / f"{self.user_agent_id}"
+
+        agent_folder.mkdir(parents=True, exist_ok=True)
+
+        log_file = agent_folder / f"{chat_id}.txt"
+
+        with open(log_file, "a") as f:
+            current_time = datetime.today().strftime('%H:%M:%S')
+
+            formatted_input = input.replace("\n", "<br>")
+            f.write(f"[{current_time}] [User] {formatted_input}\n")
+
+            if isinstance(output, dict):
+                if "image" in output and output["image"] is not None and output["image"] != "":
+                    f.write(f"[{current_time}] [Bot] Image\n")
+                elif "text" in output and output["text"] is not None and output["text"] != "":
+                    text = output["text"].replace("\n", "<br>")
+                    f.write(f"[{current_time}] [Bot] {text}\n")
+                else:
+                    f.write("My brain is messed up...try me again\n")
+            else:
+                f.write(f"[{current_time}] [Bot] {output}\n")
+
 
     def start(self) -> None:
         self.logger.info("Starting TG Bot...")

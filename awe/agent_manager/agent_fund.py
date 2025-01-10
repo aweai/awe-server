@@ -1,4 +1,7 @@
-from awe.models import TgUserDeposit, TgUserWithdraw, UserAgentData, UserStaking, TGBotUserWallet, UserAgent, UserAgentUserInvocations
+from awe.models import TgUserDeposit, \
+                        TgUserWithdraw, UserAgentData, UserStaking, \
+                        TGBotUserWallet, UserAgent, UserAgentUserInvocations, \
+                        UserReferrals
 from awe.blockchain import awe_on_chain
 from time import sleep
 from awe.settings import settings
@@ -81,6 +84,9 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
             UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
 
         user_address = user_wallet.address
+
+    # Activate user referral
+    UserReferrals.activate(tg_user_id)
 
     # Record stats
     record_user_payment(agent_id, user_address, pool_share, creator_share)

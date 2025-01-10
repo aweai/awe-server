@@ -13,3 +13,4 @@ from .tg_user_withdraw import TgUserWithdraw
 from .user_agent_stats_payment_daily_counts import UserAgentStatsPaymentDailyCounts
 from .user_agent_stats_staking_daily_counts import UserAgentStatsStakingDailyCounts
 from .game_pool_charge import GamePoolCharge
+from .user_referrals import UserReferrals

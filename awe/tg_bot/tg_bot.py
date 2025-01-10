@@ -13,6 +13,7 @@ from .payment_limit_handler import PaymentLimitHandler
 from .staking_handler import StakingHandler
 from .help_command import help_command
 from .balance_handler import BalanceHandler
+from .power_command import power_command
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -55,6 +56,10 @@ class TGBot:
         self.balance_handler = BalanceHandler(self.user_agent_id)
         balance_command_handler = CommandHandler("balance", self.balance_handler.balance_command)
         self.application.add_handler(balance_command_handler)
+
+        # Power command
+        power_command_handler = CommandHandler("power", power_command)
+        self.application.add_handler(power_command_handler)
 
         # Help command
         help_command_handler = CommandHandler("help", help_command)

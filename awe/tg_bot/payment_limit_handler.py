@@ -109,22 +109,22 @@ class PaymentLimitHandler(LimitHandler):
 
         user_id = self.get_tg_user_id_from_update(update)
         if user_id is None:
-            return 0
+            return 0, 0
 
         user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
 
         if user_wallet is None \
             or user_wallet.address is None or user_wallet.address == "":
-            return 0
+            return 0, 0
 
         tg_user_deposit = await asyncio.to_thread(TgUserDeposit.get_user_deposit_for_latest_round, self.user_agent_id, user_id)
         if tg_user_deposit is None:
-            return 0
+            return 0, 0
 
         user_invocation = await asyncio.to_thread(UserAgentUserInvocations.get_user_invocation, self.user_agent_id, user_id)
 
         if user_invocation is None:
-            return self.aweAgent.config.awe_token_config.max_invocation_per_payment
+            return self.aweAgent.config.awe_token_config.max_invocation_per_payment, self.aweAgent.config.awe_token_config.max_payment_per_round
         else:
             invocation_chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
 

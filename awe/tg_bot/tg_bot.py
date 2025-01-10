@@ -2,7 +2,7 @@ import logging
 from telegram import Update, constants
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from awe.awe_agent.awe_agent import AweAgent
-from awe.models import UserAgentUserInvocations, UserAgentData
+from awe.models import UserAgentUserInvocations
 from PIL import Image
 import io
 from pathlib import Path
@@ -12,6 +12,7 @@ from ..models.tg_bot import TGBot as TGBotConfig
 from .payment_limit_handler import PaymentLimitHandler
 from .staking_handler import StakingHandler
 from .help_command import help_command
+from .balance_handler import BalanceHandler
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -49,6 +50,11 @@ class TGBot:
         # Staking command
         staking_command_handler = CommandHandler("staking", self.staking_handler.staking_command)
         self.application.add_handler(staking_command_handler)
+
+        # Balance handler
+        self.balance_handler = BalanceHandler(self.user_agent_id)
+        balance_command_handler = CommandHandler("balance", self.balance_handler.balance_command)
+        self.application.add_handler(balance_command_handler)
 
         # Help command
         help_command_handler = CommandHandler("help", help_command)

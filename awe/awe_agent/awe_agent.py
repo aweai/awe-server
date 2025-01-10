@@ -1,5 +1,5 @@
 from .remote_llm import RemoteLLM
-from .tools import RemoteSDTool, AweTransferTool, AweBalanceTool, AweAgentBalanceTool
+from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool
 from ..models.awe_agent import AweAgent as AgentConfig
 from langchain.agents import create_json_chat_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -14,7 +14,6 @@ import asyncio
 
 import logging
 import traceback
-import os
 
 logger = logging.getLogger("[Awe Agent]")
 
@@ -110,7 +109,6 @@ class AweAgent:
 
         if config.awe_token_enabled:
             tools.append(AweTransferTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
-            tools.append(AweBalanceTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
             tools.append(AweAgentBalanceTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
 
         self.config = config

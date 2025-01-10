@@ -14,7 +14,6 @@ logger = logging.getLogger("[Stats Invocations]")
 class AITools(str, Enum):
     LLM = 'LLM'
     SD = 'SD'
-    TOKEN_QUERY = 'TOKEN_QUERY'
     TOKEN_TRANSFER = 'TOKEN_TRANSFER'
     AGENT_POOL_QUERY = 'AGENT_POOL_QUERY'
 

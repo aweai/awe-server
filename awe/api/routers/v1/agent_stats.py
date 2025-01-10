@@ -17,7 +17,6 @@ class StatsInvocationsResponse(SQLModel):
     users: List[int] = []
     llm: List[int] = []
     sd: List[int] = []
-    token_query: List[int] = []
     token_transfer: List[int] = []
 
 @router.get("/{agent_id}/invocations", response_model=Optional[StatsInvocationsResponse])
@@ -48,7 +47,6 @@ def get_invocations_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_us
         stats_dict[day] = {
             'llm': 0,
             'sd': 0,
-            'token_query': 0,
             'token_transfer': 0,
             'users': 0
         }
@@ -62,7 +60,6 @@ def get_invocations_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_us
     for day in response.days:
         response.llm.append(stats_dict[day]['llm'])
         response.sd.append(stats_dict[day]['sd'])
-        response.token_query.append(stats_dict[day]['token_query'])
         response.token_transfer.append(stats_dict[day]['token_transfer'])
         response.users.append(stats_dict[day]['users'])
 

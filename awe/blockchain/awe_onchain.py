@@ -77,4 +77,4 @@ class AweOnChain(ABC):
         if(len(decimal_part) == 1):
             decimal_part = f"0{decimal_part}"
 
-        return f"AWE {int_part}.{decimal_part}"
+        return f"$AWE {int_part}.{decimal_part}"

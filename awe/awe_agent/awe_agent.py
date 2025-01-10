@@ -42,19 +42,24 @@ class AweAgent:
 
     system_prompt="""
 
-    The process to generate answer to the user input requires multiple steps that are represented by a markdown code snippet of a json blob.
+    Beside answer user question directly, there are some tools you can use:
+
+    {tool_names}
+
+    And here are the tools descriptions:
+
+    {tools}
+
+    You can freely choose to answer directly, or use the tools to generate response.
+    No matter what your choice is, your output must be a markdown code snippet of a json blob.
+
     The json structure should contain the following keys:
     thought -> your thoughts
     action -> name of a tool
     action_input -> parameters to send to the tool
 
-    These are the tools you can use: {tool_names}.
-
-    These are the tools descriptions:
-
-    {tools}
-
-    If no tools are required to answer the question, use the tool "Final Answer" to give the text answer directly. Its parameters is the solution.
+    If giving direct text answering, use the tool "Final Answer". Its parameter is the text given to users.
+    If structured output is required in the prompt above, the structured output should also be converted to a string and given to the "Final Answer" tool as parameter.
     If there is not enough information, try to give the final answer at your best knowledge.
 
     Add the word "STOP" after each markdown snippet. Example:

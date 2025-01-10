@@ -80,8 +80,7 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
             session.refresh(user_agent)
 
         # Reset user payment invocation count
-        if user_agent.awe_agent.awe_token_config.max_invocation_per_payment != 0:
-            UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
+        UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
 
         user_address = user_wallet.address
 

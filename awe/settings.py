@@ -85,6 +85,11 @@ class AweSettings(BaseSettings):
     tn_agent_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
     tn_user_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
 
+
+    # System prompt
+    prepend_prompt: Annotated[Optional[str], Field(default=None)] = None
+    append_prompt: Annotated[Optional[str], Field(default=None)] = None
+
     def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 
         # Developer division

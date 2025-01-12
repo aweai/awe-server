@@ -44,7 +44,7 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
 
 class AweAgent:
 
-    system_prompt="""
+    preprend_prompt="""
     The user will define your behavior in the USER prompt given below.
     You should become the character defined in the USER prompt to play games with the players, following exactly as the USER prompt instructed.
 
@@ -85,7 +85,7 @@ class AweAgent:
 
     """
 
-    human_prompt="""
+    append_prompt="""
 
     The player input could be given in either group chat mode or private chat mode. Give proper answers according to the chat mode, but do not mention the chat mode, such as "private chat" and "group chat" in the response, do not use the words.
 
@@ -163,10 +163,16 @@ class AweAgent:
         return self.history_memories[session_id]
 
     def _build_prompt_template(self, agent_preset_prompt: str) -> ChatPromptTemplate:
+
+        if settings.prepend_prompt is not None:
+            self.preprend_prompt = settings.prepend_prompt
+
+        if settings.append_prompt is not None:
+            self.append_prompt = settings.append_prompt
+
         return ChatPromptTemplate.from_messages(
             [
-                ("system",  self.system_prompt),
-                ("human", agent_preset_prompt + self.human_prompt),
+                ("system", self.preprend_prompt + agent_preset_prompt + self.append_prompt),
                 MessagesPlaceholder("chat_history", optional=True),
                 MessagesPlaceholder("agent_scratchpad"),
             ]

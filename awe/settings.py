@@ -65,6 +65,7 @@ class AweSettings(BaseSettings):
     llm_task_timeout: int = 60
     sd_task_timeout: int = 60
     agent_handle_parsing_errors: bool = True
+    agent_recursion_limit: int = 3
 
     openai_model: str = "gpt-4o"
     openai_api_key: str = ""

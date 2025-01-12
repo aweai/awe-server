@@ -14,7 +14,6 @@ class AweAgentBalanceTool(AweTokenTool):
         "Input: an empty string, no other info needed"
         "Output: the balance of yourself"
     )
-    return_direct: bool = True
 
     async def _arun(self, *args: Any, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
 

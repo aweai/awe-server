@@ -17,7 +17,6 @@ class AweTransferTool(AweTokenTool):
         "Input: an integer wrapped as string, no decimal part, representing the amount of tokens you want to transfer to the user."
         "Output: the number of tokens transferred to the user"
     )
-    return_direct: bool = True
 
     async def _arun(self, amount: int = 0, *args: Any, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
 

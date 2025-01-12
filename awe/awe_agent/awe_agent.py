@@ -1,19 +1,20 @@
 from .remote_llm import RemoteLLM
 from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool
 from ..models.awe_agent import AweAgent as AgentConfig
-from langchain.agents import create_json_chat_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain.callbacks.base import AsyncCallbackHandler
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TypedDict, Annotated, Literal, Union
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 from awe.settings import settings, LLMType
 import asyncio
-
 import logging
 import traceback
+from langgraph.graph import StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_core.messages import AnyMessage
+from pydantic import BaseModel
 
 logger = logging.getLogger("[Awe Agent]")
 
@@ -42,69 +43,30 @@ class LLMInvocationLogHandler(AsyncCallbackHandler):
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
 
 
+class State(TypedDict):
+    # Messages have the type "list". The `add_messages` function
+    # in the annotation defines how this state key should be updated
+    # (in this case, it appends messages to the list, rather than overwriting them)
+    messages: Annotated[list, add_messages]
+
+
 class AweAgent:
 
-    preprend_prompt="""
-    The user will define your behavior in the USER prompt given below.
-    You should become the character defined in the USER prompt to play games with the players, following exactly as the USER prompt instructed.
-
-    Beside giving text answers directly, there are some tools you can use:
-
-    {tool_names}
-
-    And here are the tools descriptions:
-
-    {tools}
-
-    You can freely choose to answer directly, or use the tools to generate response.
-    No matter what your choice is, your output must be a markdown code snippet of a json blob.
-
-    The json structure should contain the following keys:
-    thought -> your thoughts
-    action -> name of a tool
-    action_input -> parameters to send to the tool
-
-    If giving direct text answering, use the tool "Final Answer". Its parameter is the text given to users.
-    If structured output is required in the USER prompt, the structured output should also be converted to a string and given to the "Final Answer" tool as parameter.
-    If there is not enough information, try to give the final answer at your best knowledge.
-
-    Add the word "STOP" after each markdown snippet. Example:
-
-    [Example Begin]
-    ```json
-    {{"thought": "<your thoughts>",
-    "action": "<tool name or Final Answer to give a final answer>",
-    "action_input": "<tool parameters or the final output"}}
-    ```
-    STOP
-    [Example End]
-
-    No matter what the input is, the output rule must always be strictly followed:
-    ALWAYS RETURN JSON as show in the example with nothing else, since the output will be parsed as JSON using the code.
-    Every key must exist! Action name must be in the given list! No other output other than the valid JSON!
-
-    """
-
-    append_prompt="""
-
-    The player input could be given in either group chat mode or private chat mode. Give proper answers according to the chat mode, but do not mention the chat mode, such as "private chat" and "group chat" in the response, do not use the words.
-
-    This is the player's query="{input}". Write only the next step needed to solve it. Remember to add STOP after each JSON snippet.
-    """
-
     def __init__(self, user_agent_id: int, config: AgentConfig) -> None:
+
+        self.config = config
 
         llm_log_handler = LLMInvocationLogHandler(user_agent_id)
 
         verbose_output = settings.log_level == "DEBUG"
 
         if settings.llm_type == LLMType.Local:
-            llm = RemoteLLM(
+            self.llm = RemoteLLM(
                 llm_config=config.llm_config,
                 callbacks=[llm_log_handler]
             )
         elif settings.llm_type == LLMType.OpenAI:
-            llm = ChatOpenAI(
+            self.llm = ChatOpenAI(
                 model=settings.openai_model,
                 temperature=settings.openai_temperature,
                 max_tokens=settings.openai_max_tokens,
@@ -124,74 +86,76 @@ class AweAgent:
             tools.append(AweTransferTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
             tools.append(AweAgentBalanceTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
 
-        self.config = config
+        self.llm_with_tools = self.llm.bind_tools(tools)
 
-        prompt_template = self._build_prompt_template(config.llm_config.prompt_preset)
+        graph_builder = StateGraph(State)
+        graph_builder.add_node("chatbot", self.chatbot)
+        graph_builder.set_entry_point("chatbot")
 
-        agent = create_json_chat_agent(
-            tools=tools,
-            llm = llm,
-            prompt = prompt_template,
-            stop_sequence=["STOP"],
-            template_tool_response="{observation}"
+        # Tools
+        tool_node = ToolNode(tools=tools)
+        graph_builder.add_node("tools", tool_node)
+
+        graph_builder.add_conditional_edges(
+            "chatbot",
+            tools_condition,
         )
 
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=verbose_output,
-            handle_parsing_errors=settings.agent_handle_parsing_errors,
-            max_execution_time=settings.agent_response_timeout,
-            max_iterations=5
+        graph_builder.add_conditional_edges(
+            "tools",
+            self.terminate_tools_condition
         )
 
-        self.history_memories = {}
+        # History
+        memory = MemorySaver()
 
-        self.history_executor = RunnableWithMessageHistory(
-            self.agent_executor,
-            lambda session_id: self._get_memory_for_session(session_id),
-            input_messages_key="input",
-            history_messages_key="chat_history"
-        )
+        self.graph = graph_builder.compile(checkpointer=memory)
 
-    def _get_memory_for_session(self, session_id: str):
 
-        session_id = str(session_id)
+    async def chatbot(self, state: State):
+        return {"messages": [self.llm_with_tools.ainvoke(state["messages"])]}
 
-        if session_id not in self.history_memories:
-            self.history_memories[session_id] = ChatMessageHistory()
-        return self.history_memories[session_id]
+    def terminate_tools_condition(
+            self,
+            state: Union[list[AnyMessage], dict[str, Any], BaseModel]
+        ) -> Literal["chatbot", "__end__"]:
 
-    def _build_prompt_template(self, agent_preset_prompt: str) -> ChatPromptTemplate:
+        if isinstance(state, list):
+            ai_message = state[-1]
+        elif isinstance(state, dict) and (messages := state.get("messages", [])):
+            ai_message = messages[-1]
+        elif messages := getattr(state, "messages", []):
+            ai_message = messages[-1]
+        else:
+            raise ValueError(f"No messages found in input state to terminate_tools_condition: {state}")
 
-        if settings.prepend_prompt is not None:
-            self.preprend_prompt = settings.prepend_prompt
+        if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+            tool_name = ai_message.tool_calls[-1].name
+            if tool_name in ["TransferAweToken", "GenerateImage"]:
+                return "__end__"
+        else:
+            raise ValueError(f"No tool call found in input state to terminate_tools_condition: {state}")
 
-        if settings.append_prompt is not None:
-            self.append_prompt = settings.append_prompt
+        return "chatbot"
 
-        return ChatPromptTemplate.from_messages(
-            [
-                ("system", self.preprend_prompt + agent_preset_prompt + self.append_prompt),
-                MessagesPlaceholder("chat_history", optional=True),
-                MessagesPlaceholder("agent_scratchpad"),
-            ]
-        )
-
-    async def get_response(self, input: str, tg_user_id: str, session_id: str = None) -> dict:
+    async def get_response(self, input: str, tg_user_id: str, thread_id: str = None) -> dict:
 
         output = ""
 
         try:
-            if session_id is not None:
-                resp = await self.history_executor.ainvoke(
-                    {"input": input},
-                    config={"configurable": {"session_id": session_id}, 'metadata': {'tg_user_id': tg_user_id}}
+            if thread_id is not None:
+                resp = await self.graph.ainvoke(
+                    {"messages": [("user", input)]},
+                    config={
+                        "configurable": {"thread_id": thread_id},
+                        'metadata': {'tg_user_id': tg_user_id},
+                        "recursion_limit": settings.agent_recursion_limit
+                    }
                 )
             else:
-                resp = await self.agent_executor.ainvoke(
-                    {"input": input},
-                    config={'metadata': {'tg_user_id': tg_user_id}}
+                resp = await self.graph.ainvoke(
+                    {"messages": [("user", input)]},
+                    config={'metadata': {'tg_user_id': tg_user_id}, "recursion_limit": settings.agent_recursion_limit}
                 )
 
             output = resp["output"]

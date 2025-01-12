@@ -24,7 +24,6 @@ class RemoteSDTool(BaseTool):
         "Input: A string as detailed text-2-image prompt describing the image. The string should be created from the user input, should be as detailed as possible, every element in the image, the shape, color, position of the element, the background."
         "Output: the base64 encoded string of the image"
     )
-    return_direct: bool = True
 
     task_args: dict
 

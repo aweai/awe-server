@@ -1,11 +1,15 @@
 from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
-from typing import Optional, List, Mapping, Any
+from typing import Optional, List, Mapping, Any,Sequence, Union, Dict, Literal, Type, Callable
 import asyncio
 import logging
 from ..models.awe_agent import LLMConfig
 from ..celery import app
 from awe.settings import settings
+from langchain_core.tools import BaseTool
+from langchain_core.language_models import LanguageModelInput
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import Runnable
 
 logger = logging.getLogger("[Remote LLM]")
 
@@ -50,3 +54,15 @@ class RemoteLLM(LLM):
             _: Optional[CallbackManagerForLLMRun] = None
     ) -> str:
         raise Exception("Sync call should never be used")
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+        *,
+        tool_choice: Optional[
+            Union[dict, str, Literal["auto", "none", "required", "any"], bool]
+        ] = None,
+        strict: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        return self

@@ -8,21 +8,37 @@ from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, A
 from awe.settings import settings, LLMType
 import asyncio
 import logging
-import traceback
 from langgraph.graph import StateGraph
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import add_messages, Messages
+from langchain_core.messages import trim_messages, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
+import traceback
+
 
 logger = logging.getLogger("[Awe Agent]")
+
+
+def handle_message_update(left: Messages, right: Messages) -> Messages:
+    merged = add_messages(left, right)
+    
+    trimmed = trim_messages(
+        merged,
+        max_tokens=settings.max_history_messages,
+        token_counter=len,
+        include_system=True
+    )
+
+    return trimmed
+
 
 class State(TypedDict):
     # Messages have the type "list". The `add_messages` function
     # in the annotation defines how this state key should be updated
     # (in this case, it appends messages to the list, rather than overwriting them)
-    messages: Annotated[list, add_messages]
+    messages: Annotated[list, handle_message_update]
 
 
 class AweAgent:
@@ -82,7 +98,7 @@ class AweAgent:
         memory = MemorySaver()
 
         self.graph = graph_builder.compile(checkpointer=memory)
-        
+
         if settings.log_level == "DEBUG":
             print(self.graph.get_graph().draw_ascii())
 
@@ -93,6 +109,10 @@ class AweAgent:
 
         # Log the invocation
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
+
+        if len(state["messages"]) == 1:
+            system_prompt = SystemMessage(self.config.llm_config.prompt_preset)
+            state["messages"].insert(0, system_prompt)
 
         message = await self.llm_with_tools.ainvoke(state["messages"])
 

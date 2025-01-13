@@ -36,6 +36,8 @@ class AweSettings(BaseSettings):
     server_host: str = "https://api.aweai.fun"
     webui_host: str = "https://aweai.fun"
 
+    api_rate_limit: str = "20/minute"
+
     log_level: str = 'INFO'
     admin_token: str
 
@@ -62,11 +64,11 @@ class AweSettings(BaseSettings):
     solana_developer_wallet: str
 
     llm_type: LLMType = LLMType.Local
-    agent_response_timeout: int = 100
     llm_task_timeout: int = 60
     sd_task_timeout: int = 60
-    agent_handle_parsing_errors: bool = True
     agent_recursion_limit: int = 5
+    max_history_messages: int = 20
+
 
     openai_model: str = "gpt-4o"
     openai_api_key: str = ""

@@ -10,6 +10,8 @@ def start_api_server():
 
 if __name__ == "__main__":
 
+    mp.set_start_method('spawn')
+
     logger = logging.getLogger("[Main]")
 
     logger.info("Awe starting...")

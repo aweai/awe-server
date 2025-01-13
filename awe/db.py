@@ -10,5 +10,5 @@ if settings.db_log_level == "DEBUG":
 engine = create_engine(
     settings.db_connection_string,
     pool_pre_ping=True,
-    pool_timeout=3600
+    pool_recycle=280
 )

@@ -4,7 +4,7 @@ import multiprocessing as mp
 import time
 import logging
 import signal
-from awe.db import engine
+from awe.db import engine, init_engine
 from sqlmodel import Session, select
 
 class AgentManager:
@@ -26,6 +26,7 @@ class AgentManager:
             return user_agents
 
     def start_user_agent(self, user_agent_config: UserAgentConfig):
+        init_engine()
         user_agent = UserAgent(user_agent_config)
         user_agent.start_tg_bot()
 

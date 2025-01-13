@@ -14,6 +14,7 @@ from .staking_handler import StakingHandler
 from .help_command import help_command
 from .balance_handler import BalanceHandler
 from .power_command import power_command
+from .reset_handler import ResetHandler
 from pathlib import Path
 from datetime import datetime
 
@@ -72,6 +73,11 @@ class TGBot:
         # Help command
         help_command_handler = CommandHandler("help", help_command)
         self.application.add_handler(help_command_handler)
+
+        # Reset command
+        self.reset_handler = ResetHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+        reset_command_handler = CommandHandler("reset", self.reset_handler.reset_command)
+        self.application.add_handler(reset_command_handler)
 
         # Message handler
         message_handler = MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT & (~filters.COMMAND), self.respond_message)

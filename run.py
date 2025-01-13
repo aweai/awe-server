@@ -4,13 +4,13 @@ import logging
 import uvicorn
 from awe.api.app import app
 import multiprocessing as mp
+from awe.db import init_engine
 
 def start_api_server():
+    init_engine()
     uvicorn.run(app, host="0.0.0.0", port=7777)
 
 if __name__ == "__main__":
-
-    mp.set_start_method('spawn')
 
     logger = logging.getLogger("[Main]")
 

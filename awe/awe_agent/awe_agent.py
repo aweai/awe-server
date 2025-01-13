@@ -3,17 +3,16 @@ from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool
 from ..models.awe_agent import AweAgent as AgentConfig
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables.config import RunnableConfig
-from typing import Dict, Any, List, Optional, TypedDict, Annotated, Literal, Union
+from typing import Any, TypedDict, Annotated, Literal, Union
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 from awe.settings import settings, LLMType
 import asyncio
 import logging
 from langgraph.graph import StateGraph
-from langgraph.graph.message import add_messages, Messages
-from langchain_core.messages import trim_messages, SystemMessage
+from langgraph.graph.message import add_messages, Messages, RemoveMessage
+from langchain_core.messages import trim_messages, SystemMessage, AnyMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
 import traceback
 
@@ -23,7 +22,7 @@ logger = logging.getLogger("[Awe Agent]")
 
 def handle_message_update(left: Messages, right: Messages) -> Messages:
     merged = add_messages(left, right)
-    
+
     trimmed = trim_messages(
         merged,
         max_tokens=settings.max_history_messages,
@@ -84,6 +83,9 @@ class AweAgent:
         tool_node = ToolNode(tools=tools)
         graph_builder.add_node("tools", tool_node)
 
+        graph_builder.add_node("reset", self.reset_pre)
+        graph_builder.add_edge("reset", "__end__")
+
         graph_builder.add_conditional_edges(
             "chatbot",
             tools_condition,
@@ -102,6 +104,8 @@ class AweAgent:
         if settings.log_level == "DEBUG":
             print(self.graph.get_graph().draw_ascii())
 
+    async def reset_pre(self, state: State, config: RunnableConfig):
+        return []
 
     async def chatbot(self, state: State, config: RunnableConfig):
 
@@ -111,12 +115,16 @@ class AweAgent:
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
 
         if len(state["messages"]) == 1:
+            logger.debug("Only 1 message. Add system prompt.")
             system_prompt = SystemMessage(self.config.llm_config.prompt_preset)
-            state["messages"].insert(0, system_prompt)
-
-        message = await self.llm_with_tools.ainvoke(state["messages"])
-
-        return {"messages": [message]}
+            user_message = state["messages"][-1]
+            delete_message = RemoveMessage(id=user_message.id)
+            new_user_message = HumanMessage(content=user_message.content)
+            ai_message = await self.llm_with_tools.ainvoke([system_prompt, new_user_message])
+            return {"messages": [delete_message, system_prompt, new_user_message, ai_message]}
+        else:
+            message = await self.llm_with_tools.ainvoke(state["messages"])
+            return {"messages": [message]}
 
 
     def terminate_tools_condition(
@@ -142,6 +150,14 @@ class AweAgent:
 
         # Tool call failed. Return the message to agent
         return "chatbot"
+
+
+    async def clear_message_for_user(self, tg_user_id: str):
+        config = {"configurable": {"thread_id": tg_user_id},}
+        current_state = await self.graph.aget_state(config)
+        messages = current_state.values["messages"]
+        deleted_messages = [RemoveMessage(id=m.id) for m in messages]
+        await self.graph.aupdate_state(config, {"messages": deleted_messages}, as_node="reset")
 
 
     async def get_response(self, input: str, tg_user_id: str, thread_id: str = None) -> dict:
@@ -172,9 +188,9 @@ class AweAgent:
 
             if 'messages' in resp:
                 if len(resp["messages"]) > 0:
-                    output = resp["messages"][-1].content          
+                    output = resp["messages"][-1].content
 
-            
+
         except Exception as e:
             logger.error(e)
             logger.error(traceback.format_exc())

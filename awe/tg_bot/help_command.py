@@ -10,5 +10,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = msg + "/staking - Staking info\n\n"
     msg = msg + "/balance - Check your wallet balance\n\n"
     msg = msg + "/power - Power info\n\n"
+    msg = msg + "/reset - Clear chat history and start over\n\n"
 
     await context.bot.send_message(update.effective_chat.id, msg)

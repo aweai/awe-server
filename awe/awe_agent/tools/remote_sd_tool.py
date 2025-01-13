@@ -1,6 +1,5 @@
-from typing import Optional
 from langchain.tools import BaseTool
-from langchain_core.callbacks.manager import AsyncCallbackManagerForToolRun
+from langchain_core.runnables.config import RunnableConfig
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -14,16 +13,23 @@ import random
 import logging
 from awe.settings import settings
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
+from pydantic import BaseModel, Field
+from typing import Type
 
 logger = logging.getLogger("[Remote SD Tool]")
+
+
+class RemoteSDInput(BaseModel):
+    amount: str = Field(description="Detailed text-2-image prompt describing the image. The string should be created from the user input, should be as detailed as possible, every element in the image, the shape, color, position of the element, the background.")
+
 
 class RemoteSDTool(BaseTool):
     name: str = "GenerateImage"
     description: str =  (
         "Useful for when you need to generate an image using text prompt."
-        "Input: A string as detailed text-2-image prompt describing the image. The string should be created from the user input, should be as detailed as possible, every element in the image, the shape, color, position of the element, the background."
-        "Output: the base64 encoded string of the image"
     )
+
+    args_schema: Type[BaseModel] = RemoteSDInput
 
     task_args: dict
 
@@ -63,12 +69,9 @@ class RemoteSDTool(BaseTool):
 
         return image_filename
 
-    async def _arun(self, prompt: str = None, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+    async def _arun(self, prompt: str, config: RunnableConfig) -> str:
 
-        if run_manager is None or "tg_user_id" not in run_manager.metadata:
-            raise Exception("tg_user_id is not set")
-
-        tg_user_id = run_manager.metadata["tg_user_id"]
+        tg_user_id = config.get("configurable", {}).get("tg_user_id")
 
         if prompt is None or prompt == "":
             return ""

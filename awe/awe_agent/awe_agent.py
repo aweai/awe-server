@@ -2,7 +2,7 @@ from .remote_llm import RemoteLLM
 from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool
 from ..models.awe_agent import AweAgent as AgentConfig
 from langchain_openai import ChatOpenAI
-from langchain.callbacks.base import AsyncCallbackHandler
+from langchain_core.runnables.config import RunnableConfig
 from typing import Dict, Any, List, Optional, TypedDict, Annotated, Literal, Union
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 from awe.settings import settings, LLMType
@@ -18,31 +18,6 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("[Awe Agent]")
 
-class LLMInvocationLogHandler(AsyncCallbackHandler):
-    """Async callback handler that can be used to handle callbacks from langchain."""
-
-    def __init__(self, user_agent_id: int):
-        super().__init__()
-        self.user_agent_id = user_agent_id
-
-
-    async def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], metadata: Optional[dict[str, Any]], **kwargs: Any
-    ) -> None:
-
-        if "tg_user_id" not in metadata:
-            raise Exception("tg_user_id is not set")
-
-        tg_user_id = metadata["tg_user_id"]
-
-        # Print the debug log
-        if settings.log_level == "DEBUG":
-            logger.debug("|||".join(prompts))
-
-        # Log the invocation
-        await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
-
-
 class State(TypedDict):
     # Messages have the type "list". The `add_messages` function
     # in the annotation defines how this state key should be updated
@@ -55,15 +30,13 @@ class AweAgent:
     def __init__(self, user_agent_id: int, config: AgentConfig) -> None:
 
         self.config = config
-
-        llm_log_handler = LLMInvocationLogHandler(user_agent_id)
+        self.user_agent_id = user_agent_id
 
         verbose_output = settings.log_level == "DEBUG"
 
         if settings.llm_type == LLMType.Local:
             self.llm = RemoteLLM(
-                llm_config=config.llm_config,
-                callbacks=[llm_log_handler]
+                llm_config=config.llm_config
             )
         elif settings.llm_type == LLMType.OpenAI:
             self.llm = ChatOpenAI(
@@ -72,7 +45,6 @@ class AweAgent:
                 max_tokens=settings.openai_max_tokens,
                 timeout=settings.llm_task_timeout,
                 max_retries=settings.openai_max_retries,
-                callbacks=[llm_log_handler],
                 verbose=verbose_output,
                 disable_streaming=True
             )
@@ -86,7 +58,7 @@ class AweAgent:
             tools.append(AweTransferTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
             tools.append(AweAgentBalanceTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
 
-        self.llm_with_tools = self.llm.bind_tools(tools)
+        self.llm_with_tools = self.llm.bind_tools(tools, parallel_tool_calls=False, strict=True)
 
         graph_builder = StateGraph(State)
         graph_builder.add_node("chatbot", self.chatbot)
@@ -110,10 +82,22 @@ class AweAgent:
         memory = MemorySaver()
 
         self.graph = graph_builder.compile(checkpointer=memory)
+        
+        if settings.log_level == "DEBUG":
+            print(self.graph.get_graph().draw_ascii())
 
 
-    async def chatbot(self, state: State):
-        return {"messages": [self.llm_with_tools.ainvoke(state["messages"])]}
+    async def chatbot(self, state: State, config: RunnableConfig):
+
+        tg_user_id = config.get("configurable", {}).get("tg_user_id")
+
+        # Log the invocation
+        await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
+
+        message = await self.llm_with_tools.ainvoke(state["messages"])
+
+        return {"messages": [message]}
+
 
     def terminate_tools_condition(
             self,
@@ -121,22 +105,24 @@ class AweAgent:
         ) -> Literal["chatbot", "__end__"]:
 
         if isinstance(state, list):
-            ai_message = state[-1]
+            tool_message = state[-1]
         elif isinstance(state, dict) and (messages := state.get("messages", [])):
-            ai_message = messages[-1]
+            tool_message = messages[-1]
         elif messages := getattr(state, "messages", []):
-            ai_message = messages[-1]
+            tool_message = messages[-1]
         else:
             raise ValueError(f"No messages found in input state to terminate_tools_condition: {state}")
 
-        if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-            tool_name = ai_message.tool_calls[-1].name
+        if hasattr(tool_message, "name"):
+
+            tool_name = tool_message.name
+
             if tool_name in ["TransferAweToken", "GenerateImage"]:
                 return "__end__"
-        else:
-            raise ValueError(f"No tool call found in input state to terminate_tools_condition: {state}")
 
+        # Tool call failed. Return the message to agent
         return "chatbot"
+
 
     async def get_response(self, input: str, tg_user_id: str, thread_id: str = None) -> dict:
 
@@ -147,18 +133,28 @@ class AweAgent:
                 resp = await self.graph.ainvoke(
                     {"messages": [("user", input)]},
                     config={
-                        "configurable": {"thread_id": thread_id},
-                        'metadata': {'tg_user_id': tg_user_id},
+                        "configurable": {"thread_id": thread_id, "tg_user_id": tg_user_id},
                         "recursion_limit": settings.agent_recursion_limit
-                    }
+                    },
+                    debug=settings.log_level == "DEBUG"
                 )
             else:
                 resp = await self.graph.ainvoke(
                     {"messages": [("user", input)]},
-                    config={'metadata': {'tg_user_id': tg_user_id}, "recursion_limit": settings.agent_recursion_limit}
+                    config={'configurable': {'tg_user_id': tg_user_id}, "recursion_limit": settings.agent_recursion_limit},
+                    debug=settings.log_level == "DEBUG"
                 )
 
-            output = resp["output"]
+            logger.debug("response from graph ainvoke")
+            logger.debug(resp)
+
+            output = ""
+
+            if 'messages' in resp:
+                if len(resp["messages"]) > 0:
+                    output = resp["messages"][-1].content          
+
+            
         except Exception as e:
             logger.error(e)
             logger.error(traceback.format_exc())

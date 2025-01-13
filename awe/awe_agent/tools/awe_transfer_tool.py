@@ -1,27 +1,34 @@
 from .awe_token_tool import AweTokenTool
-from langchain_core.callbacks.manager import AsyncCallbackManagerForToolRun
+from langchain_core.runnables.config import RunnableConfig
 import asyncio
 import logging
 
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 from awe.agent_manager.agent_fund import transfer_to_user, TransferToUserNotAllowedException
+from pydantic import BaseModel, Field
+from typing import Type
+
 
 logger = logging.getLogger("[Awe Transfer Tool]")
 
-from typing import Any, Optional
+
+class AweTransferInput(BaseModel):
+    amount: str = Field(description="the amount of tokens to transfer")
+
 
 class AweTransferTool(AweTokenTool):
     name: str = "TransferAweToken"
     description: str =  (
         "Useful for when you need to transfer the AWE tokens to user."
-        "Input: an integer wrapped as string, no decimal part, representing the amount of tokens you want to transfer to the user."
-        "Output: the number of tokens transferred to the user"
     )
 
-    async def _arun(self, amount: int = 0, *args: Any, run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
+    args_schema: Type[BaseModel] = AweTransferInput
 
-        tg_user_id = self.get_tg_user_id(run_manager)
-        wallet_address = await self.get_tg_user_address(run_manager)
+    async def _arun(self, amount: int, config: RunnableConfig) -> str:
+
+        tg_user_id = config.get("configurable", {}).get("tg_user_id")
+
+        wallet_address = await self.get_tg_user_address(config)
 
         if wallet_address == "":
             return "You didn't set your Solana wallet address to receive tokens. Please DM me with /wallet command to set your wallet address."

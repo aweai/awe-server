@@ -21,6 +21,12 @@ from datetime import datetime
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+
+# Skip regular TG Bot logs
+logging.getLogger("telegram.ext.Updater").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext.ExtBot").setLevel(logging.WARNING)
+
+
 class TGBot:
     def __init__(self, agent: AweAgent, tg_bot_config: TGBotConfig, user_agent_id: int) -> None:
 

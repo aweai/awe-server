@@ -40,6 +40,7 @@ class AweSettings(BaseSettings):
     admin_token: str
 
     db_connection_string: str
+    db_log_level: str = 'WARN'
     celery_broker_url: str
     celery_backend_url: str
     redis_cache: str
@@ -65,7 +66,7 @@ class AweSettings(BaseSettings):
     llm_task_timeout: int = 60
     sd_task_timeout: int = 60
     agent_handle_parsing_errors: bool = True
-    agent_recursion_limit: int = 3
+    agent_recursion_limit: int = 5
 
     openai_model: str = "gpt-4o"
     openai_api_key: str = ""
@@ -90,6 +91,13 @@ class AweSettings(BaseSettings):
     # System prompt
     prepend_prompt: Annotated[Optional[str], Field(default=None)] = None
     append_prompt: Annotated[Optional[str], Field(default=None)] = None
+
+    # Langsmith
+    langsmith_api_key: Annotated[Optional[str], Field(default=None)] = None
+    langsmith_tracing: Annotated[bool, Field(default=None)] = False
+    langsmith_endpoint: Annotated[Optional[str], Field(default=None)] = None
+    langsmith_project: Annotated[Optional[str], Field(default=None)] = None
+
 
     def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 

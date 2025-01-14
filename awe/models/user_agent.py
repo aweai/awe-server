@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Annotated
 from sqlmodel import SQLModel, Field, Column, Relationship
 from awe.models.awe_agent import AweAgent, AweAgentSAType
 from awe.models.tg_bot import TGBot, TGBotSAType
@@ -13,10 +13,14 @@ class UserAgent(SQLModel, table=True):
     tg_bot: Optional[TGBot] = Field(sa_column=Column(TGBotSAType))
     awe_agent: Optional[AweAgent] = Field(sa_column=Column(AweAgentSAType))
     enabled: bool = Field(default=False)
+    score: Annotated[int, Field(nullable=False, default=0)] = 0
+
     created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
     updated_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
     deleted_at: Optional[int] = Field(nullable=True)
+
     agent_data: Optional[UserAgentData] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+
 
     def validate_for_save(self) -> str:
         if self.name == "":

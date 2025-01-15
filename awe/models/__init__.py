@@ -14,3 +14,4 @@ from .user_agent_stats_payment_daily_counts import UserAgentStatsPaymentDailyCou
 from .user_agent_stats_staking_daily_counts import UserAgentStatsStakingDailyCounts
 from .game_pool_charge import GamePoolCharge
 from .user_referrals import UserReferrals
+from .user_agent_weekly_emissions import UserAgentWeeklyEmissions

@@ -1,8 +1,9 @@
 from sqlmodel import SQLModel, Field, select, Session
 from .utils import unix_timestamp_in_seconds
-from typing import List, Optional
+from typing import List
 from typing_extensions import Self
 from awe.db import engine
+from .utils import unix_timestamp_in_seconds
 
 class UserStaking(SQLModel, table=True):
     id: int | None = Field(primary_key=True)
@@ -24,3 +25,18 @@ class UserStaking(SQLModel, table=True):
             ).order_by(UserStaking.created_at.asc())
 
             return session.exec(statement).all()
+
+    def get_multiplier(self, till_day_timestamp: int) -> float:
+
+        period = till_day_timestamp - self.created_at
+
+        if period >= 12 * 30 * 86400:
+            return 3
+
+        if period >= 6 * 30 * 86400:
+            return 2
+
+        if period >= 3 * 30 * 86400:
+            return 1.5
+
+        return 1

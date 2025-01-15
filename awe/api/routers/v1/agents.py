@@ -20,9 +20,10 @@ class AgentListItem(BaseModel):
     tg_username: str
     description: str
 
-    invocations: int
+    pool: int
     staking: int
 
+    invocations: int
     score: int
 
 
@@ -63,6 +64,7 @@ def get_agent_list(
                 tg_username=user_agent.tg_bot.username,
                 description=user_agent.tg_bot.start_message,
                 invocations=user_agent.agent_data.total_invocations,
+                pool=user_agent.agent_data.awe_token_quote,
                 staking=user_agent.agent_data.awe_token_staking
             )
             for user_agent in user_agents

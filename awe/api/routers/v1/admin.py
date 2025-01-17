@@ -7,6 +7,8 @@ from awe.blockchain import awe_on_chain
 from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
+from awe.agent_manager.agent_emissions import update_all_agent_emissions
+from awe.agent_manager.player_emissions import update_player_emissions, update_staker_emissions
 import logging
 import traceback
 
@@ -39,8 +41,8 @@ def add_user_agent_awe_quote(agent_id, quote_params: QuoteParams, _: Annotated[s
     return user_agent_data
 
 
-@router.post("/system/agent-scores")
-def update_agent_scores(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+@router.post("/system/agent-emissions")
+def update_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
 
     if last_cycle_before == 0:
         # Update for the last cycle
@@ -59,13 +61,16 @@ def update_agent_scores(background_tasks: BackgroundTasks, _: Annotated[str, Dep
 
     last_cycle_end = emission_start + (completed_cycles * interval_seconds)
 
-    background_tasks.add_task(update_agent_scores, last_cycle_end)
+    background_tasks.add_task(update_agent_emissions, last_cycle_end)
 
     return "Task initiated!"
 
-def update_agent_scores(last_cycle_end: int):
+def update_agent_emissions(last_cycle_end: int):
     try:
         update_all_agent_scores(last_cycle_end)
+        update_all_agent_emissions(last_cycle_end)
+        update_player_emissions(last_cycle_end)
+        # update_staker_emissions(last_cycle_end)
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

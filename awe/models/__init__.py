@@ -15,3 +15,5 @@ from .user_agent_stats_staking_daily_counts import UserAgentStatsStakingDailyCou
 from .game_pool_charge import GamePoolCharge
 from .user_referrals import UserReferrals
 from .user_agent_weekly_emissions import UserAgentWeeklyEmissions
+from .player_weekly_emissions import PlayerWeeklyEmissions
+from .staker_weekly_emissions import StakerWeeklyEmissions

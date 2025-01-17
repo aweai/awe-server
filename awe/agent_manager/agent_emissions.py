@@ -18,7 +18,7 @@ def update_all_agent_emissions(cycle_end_timestamp: int):
     start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
     end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
 
-    logger.info(f"Updating agent scores for cycle: [{start_datetime}, {end_datetime})")
+    logger.info(f"Updating agent emissions for cycle: [{start_datetime}, {end_datetime})")
 
     # Calculate the number of top Memegents
     with Session(engine) as session:
@@ -42,7 +42,7 @@ def update_all_agent_emissions(cycle_end_timestamp: int):
     # Calculate the total scores of top agents
 
     with Session(engine) as session:
-        statement = select(func.sum(UserAgentWeeklyEmissions)).where(
+        statement = select(func.sum(UserAgentWeeklyEmissions.score)).where(
             UserAgentWeeklyEmissions.day == cycle_start_timestamp
         ).order_by(UserAgentWeeklyEmissions.score.desc()).limit(top_N)
 
@@ -58,7 +58,6 @@ def update_all_agent_emissions(cycle_end_timestamp: int):
     num_agent_processed = 0
 
     while True:
-
         with Session(engine) as session:
             statement = select(UserAgentWeeklyEmissions).where(
                 UserAgentWeeklyEmissions.day == cycle_start_timestamp
@@ -99,12 +98,12 @@ def get_total_cycle_emissions(cycle_end_timestamp: int) -> int:
         return 0
 
     if week_num > 150:
-        return total_supply * 0.001
+        return math.floor(total_supply * 0.001)
 
     if week_num > 50:
-        return total_supply * 0.003
+        return math.floor(total_supply * 0.003)
 
     if week_num > 10:
-        return total_supply * 0.01
+        return math.floor(total_supply * 0.01)
 
-    return 0.02
+    return math.floor(total_supply * 0.02)

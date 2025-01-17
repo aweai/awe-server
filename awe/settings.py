@@ -88,7 +88,8 @@ class AweSettings(BaseSettings):
     tn_agent_staking_amount: Annotated[int, Field(default=100, gt=0)]
     tn_agent_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
     tn_user_staking_locking_days: Annotated[int, Field(default=30, ge=0)]
-
+    tn_emission_start: int
+    tn_emission_interval_days: int = 7
 
     # System prompt
     prepend_prompt: Annotated[Optional[str], Field(default=None)] = None

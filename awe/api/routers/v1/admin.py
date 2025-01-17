@@ -1,9 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from typing import Optional, Annotated
 from pydantic import BaseModel
 from awe.models.user_agent_data import UserAgentData
 from awe.api.dependencies import get_admin
 from awe.blockchain import awe_on_chain
+from awe.models.utils import get_day_as_timestamp
+from awe.settings import settings
+from awe.agent_manager.agent_score import update_all_agent_scores
+import logging
+import traceback
+
+logger = logging.getLogger("[Admin API]")
 
 router = APIRouter(
     prefix="/v1/admin"
@@ -30,3 +37,35 @@ class QuoteParams(BaseModel):
 def add_user_agent_awe_quote(agent_id, quote_params: QuoteParams, _: Annotated[str, Depends(get_admin)]):
     user_agent_data = UserAgentData.add_awe_token_quote(agent_id, quote_params.amount)
     return user_agent_data
+
+
+@router.post("/system/agent-scores")
+def update_agent_scores(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+
+    if last_cycle_before == 0:
+        # Update for the last cycle
+        last_cycle_before = get_day_as_timestamp()
+
+    interval_seconds = settings.tn_emission_interval_days * 86400
+
+    # Calculate the end timestamp of last cycle
+    emission_start = settings.tn_emission_start
+
+    if last_cycle_before <= emission_start:
+        raise Exception("Invalid for_cycle_before provided")
+
+    elapsed_time  = last_cycle_before - emission_start
+    completed_cycles = elapsed_time // interval_seconds
+
+    last_cycle_end = emission_start + (completed_cycles * interval_seconds)
+
+    background_tasks.add_task(update_agent_scores, last_cycle_end)
+
+    return "Task initiated!"
+
+def update_agent_scores(last_cycle_end: int):
+    try:
+        update_all_agent_scores(last_cycle_end)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())

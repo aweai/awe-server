@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
-from typing import Optional, Annotated
+from typing import Optional, Annotated, List
 from pydantic import BaseModel
-from awe.models.user_agent_data import UserAgentData
+from awe.models import UserAgentData, UserAgentWeeklyEmissions, PlayerWeeklyEmissions, StakerWeeklyEmissions
 from awe.api.dependencies import get_admin
 from awe.blockchain import awe_on_chain
 from awe.models.utils import get_day_as_timestamp
@@ -43,7 +43,66 @@ def add_user_agent_awe_quote(agent_id, quote_params: QuoteParams, _: Annotated[s
 
 @router.post("/system/agent-emissions")
 def update_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    background_tasks.add_task(update_agent_emissions, last_cycle_end)
+    return "Task initiated!"
 
+
+@router.get("/system/agent-emissions", response_model=List[UserAgentWeeklyEmissions])
+def get_agent_emissions(_: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
+    
+    page_size = 100
+    
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
+    
+    with Session(engine) as session:
+        statement = select(UserAgentWeeklyEmissions).where(
+            UserAgentWeeklyEmissions.day == last_cycle_start
+        ).order_by(UserAgentWeeklyEmissions.score.desc()).offset(page * page_size).limit(page_size)
+
+        agent_emissions = session.exec(statement).all()
+
+        return agent_emissions
+
+
+@router.get("/system/agent-emissions/{agent_id}/players", response_model=List[PlayerWeeklyEmissions])
+def get_agent_player_emissions(agent_id: int, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
+    page_size = 100
+    
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
+
+    with Session(engine) as session:
+        statement = select(PlayerWeeklyEmissions).where(
+            PlayerWeeklyEmissions.user_agent_id == agent_id,
+            PlayerWeeklyEmissions.day == last_cycle_start
+        ).order_by(PlayerWeeklyEmissions.score.desc()).offset(page * page_size).limit(page_size)
+
+        player_emissions = session.exec(statement).all()
+
+        return player_emissions
+
+
+@router.get("/system/agent-emissions/{agent_id}/stakers", response_model=List[StakerWeeklyEmissions])
+def get_agent_staker_emissions(agent_id: int, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
+    page_size = 100
+    
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
+
+    with Session(engine) as session:
+        statement = select(StakerWeeklyEmissions).where(
+            StakerWeeklyEmissions.user_agent_id == agent_id,
+            StakerWeeklyEmissions.day == last_cycle_start
+        ).order_by(StakerWeeklyEmissions.score.desc()).offset(page * page_size).limit(page_size)
+
+        staker_emissions = session.exec(statement).all()
+
+        return staker_emissions
+
+
+def get_last_emission_cycle_end_before(before_timestamp: int) -> int:
     if last_cycle_before == 0:
         # Update for the last cycle
         last_cycle_before = get_day_as_timestamp()
@@ -59,11 +118,8 @@ def update_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, 
     elapsed_time  = last_cycle_before - emission_start
     completed_cycles = elapsed_time // interval_seconds
 
-    last_cycle_end = emission_start + (completed_cycles * interval_seconds)
+    return emission_start + (completed_cycles * interval_seconds)
 
-    background_tasks.add_task(update_agent_emissions, last_cycle_end)
-
-    return "Task initiated!"
 
 def update_agent_emissions(last_cycle_end: int):
     try:

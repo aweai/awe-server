@@ -66,11 +66,6 @@ def update_all_agent_emissions(cycle_end_timestamp: int):
             top_agent_emissions = session.exec(statement).all()
             logger.info(f"num of top_agent_emissions in page {current_page}: {len(top_agent_emissions)}")
 
-            current_page += 1
-
-            if len(top_agent_emissions) == 0:
-                break
-
             for emission in top_agent_emissions:
 
                 emission.emission = math.floor(total_agent_emissions * emission.score / score_sum)
@@ -82,6 +77,11 @@ def update_all_agent_emissions(cycle_end_timestamp: int):
                     break
 
             session.commit()
+
+            if len(top_agent_emissions) < page_size:
+                break
+
+            current_page += 1
 
     logger.info(f"Updated emission for {num_agent_processed} agents!")
 

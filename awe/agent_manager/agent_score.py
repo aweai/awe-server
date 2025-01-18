@@ -22,14 +22,9 @@ def update_all_agent_scores(cycle_end_timestamp: int):
 
     logger.info(f"Updating agent scores for cycle: [{start_datetime}, {end_datetime})")
 
-    current_page = 0
-
     # Get max staking pool size and max players in this cycle
     max_staking_score, max_player_score = get_max_agent_scores(cycle_start_timestamp, cycle_end_timestamp)
 
-    # Update agent score
-
-    current_page = 0
 
     # Check if we have already processed this cycle before
     with Session(engine) as session:
@@ -42,6 +37,8 @@ def update_all_agent_scores(cycle_end_timestamp: int):
         cycle_processed_before = count != 0
 
     logger.info(f"Cycle processed before: {cycle_processed_before}")
+
+    current_page = 0
 
     while(True):
 

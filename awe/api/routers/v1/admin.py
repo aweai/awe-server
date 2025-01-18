@@ -8,7 +8,7 @@ from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
 from awe.agent_manager.agent_emissions import update_all_agent_emissions
-from awe.agent_manager.player_emissions import update_player_emissions, update_staker_emissions
+from awe.agent_manager.in_agent_emissions import update_all_in_agent_emissions
 import logging
 import traceback
 
@@ -69,8 +69,7 @@ def update_agent_emissions(last_cycle_end: int):
     try:
         update_all_agent_scores(last_cycle_end)
         update_all_agent_emissions(last_cycle_end)
-        update_player_emissions(last_cycle_end)
-        # update_staker_emissions(last_cycle_end)
+        update_all_in_agent_emissions(last_cycle_end)
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

@@ -80,9 +80,9 @@ def update_all_agent_scores(cycle_end_timestamp: int):
                 if agent_staking_score == 0 and agent_player_score == 0:
                     agent_score = 0
                 else:
-                    staking_score = agent_staking_score / max_staking_score
-                    player_score = agent_player_score / max_player_score
-                    agent_score = 2 * staking_score * player_score / ( staking_score + player_score )
+                    staking_score = 0 if max_staking_score == 0 else agent_staking_score / max_staking_score
+                    player_score = 0 if max_player_score == 0 else agent_player_score / max_player_score
+                    agent_score = 0 if staking_score + player_score == 0 else 2 * staking_score * player_score / ( staking_score + player_score )
                     agent_score = int(agent_score * 10000)
 
                 logger.debug(f"Agent {agent_id} score {agent_score}")
@@ -184,15 +184,18 @@ def get_max_agent_scores(cycle_start_timestamp: int, cycle_end_timestamp: int) -
             page_agent_stakings = get_agent_stakings(agent_ids, cycle_end_timestamp)
             logger.debug(page_agent_stakings)
 
-            page_max_agent_id = max(page_agent_stakings)
-            max_staking_score = max([page_agent_stakings[page_max_agent_id], max_staking_score])
+            if len(page_agent_stakings.keys()) != 0:
+                page_max_staking_score = max(page_agent_stakings.values())
+                max_staking_score = max(page_max_staking_score, max_staking_score)
 
             logger.info("Getting agent players...")
             page_agent_players = get_agent_players(agent_ids, cycle_end_timestamp)
             logger.debug(page_agent_players)
 
-            page_max_agent_id = max(page_agent_players)
-            max_player_score = max([page_agent_players[page_max_agent_id], max_player_score])
+            if len(page_agent_players.keys()) != 0:
+                page_max_player_score = max(page_agent_players.values())
+                max_player_score = max(page_max_player_score, max_player_score)
+                
 
     logger.info(f"Total agents: {total_agents}")
     logger.info(f"Max agent staking score: {max_staking_score}")
@@ -209,11 +212,11 @@ def get_agent_stakings(agent_ids: List[int], day_timestamp: int) -> Dict[int, in
     logger.info(f"Getting agent stakings for {len(agent_ids)} agents")
 
     with Session(engine) as session:
-        statement = select(UserStaking).where(
+        statement = select(UserStaking.user_agent_id, func.sum(UserStaking.amount)).where(
             UserStaking.user_agent_id.in_(agent_ids),
-            or_(UserStaking.released_at.is_(None), UserStaking.released_at >= start_timestamp),
-            UserStaking.created_at < end_timestamp
-        )
+            or_(UserStaking.released_at.is_(None), UserStaking.released_at >= end_timestamp),
+            UserStaking.created_at < start_timestamp
+        ).group_by(UserStaking.user_agent_id)
 
         user_stakings = session.exec(statement).all()
 
@@ -221,13 +224,8 @@ def get_agent_stakings(agent_ids: List[int], day_timestamp: int) -> Dict[int, in
 
         agent_staking_scores = {}
 
-        for user_staking in user_stakings:
-            agent_id = user_staking.user_agent_id
-
-            if agent_id not in agent_staking_scores:
-                agent_staking_scores[agent_id] = 0
-
-            agent_staking_scores[agent_id] = agent_staking_scores[agent_id] + user_staking.amount * user_staking.get_multiplier(day_timestamp)
+        for agent_id, total_amount in user_stakings:
+            agent_staking_scores[agent_id] = total_amount
 
 
     return agent_staking_scores
@@ -256,6 +254,6 @@ def get_agent_players(agent_ids: List[int], day_timestamp: int) -> int:
 
         agent_user_scores = {}
         for agent_id, agent_users in agent_users:
-            agent_user_scores[agent_id] = agent_users
+            agent_user_scores[agent_id] = int(agent_users)
 
         return agent_user_scores

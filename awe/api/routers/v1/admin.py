@@ -103,19 +103,19 @@ def get_agent_staker_emissions(agent_id: int, _: Annotated[str, Depends(get_admi
 
 
 def get_last_emission_cycle_end_before(before_timestamp: int) -> int:
-    if last_cycle_before == 0:
+    if before_timestamp == 0:
         # Update for the last cycle
-        last_cycle_before = get_day_as_timestamp()
+        before_timestamp = get_day_as_timestamp()
 
     interval_seconds = settings.tn_emission_interval_days * 86400
 
     # Calculate the end timestamp of last cycle
     emission_start = settings.tn_emission_start
 
-    if last_cycle_before <= emission_start:
+    if before_timestamp <= emission_start:
         raise Exception("Invalid for_cycle_before provided")
 
-    elapsed_time  = last_cycle_before - emission_start
+    elapsed_time  = before_timestamp - emission_start
     completed_cycles = elapsed_time // interval_seconds
 
     return emission_start + (completed_cycles * interval_seconds)

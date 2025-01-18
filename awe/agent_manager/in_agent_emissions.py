@@ -178,7 +178,7 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
 
             staking_scores = {}
             for user_staking in user_stakings:
-                staking_scores[user_staking.id] = [user_staking.tg_user_id, math.floor(user_staking.amount * user_staking.get_multiplier())]
+                staking_scores[user_staking.id] = [user_staking.tg_user_id, math.floor(user_staking.amount * user_staking.get_multiplier(cycle_end_timestamp))]
 
             # Get old records
             statement = select(StakerWeeklyEmissions).where(

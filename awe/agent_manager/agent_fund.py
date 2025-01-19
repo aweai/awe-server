@@ -3,7 +3,6 @@ from awe.models import TgUserDeposit, \
                         TGBotUserWallet, UserAgent, UserAgentUserInvocations, \
                         UserReferrals
 from awe.blockchain import awe_on_chain
-from time import sleep
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select
@@ -14,6 +13,8 @@ from threading import Lock
 from typing import Dict
 from awe.models.utils import unix_timestamp_in_seconds
 from .agent_stats import record_user_withdraw, record_user_payment, record_user_staking, record_user_staking_release
+import json
+from awe.cache import cache
 
 logger = logging.getLogger("[Agent Fund]")
 
@@ -33,8 +34,11 @@ def collect_user_fund(
     tg_user_id: str,
     approve_tx: str,
 ):
-    # Wait for the finalize of the approve tx before executing
-    sleep(20)
+    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
+    message = json.dumps([tg_user_id, f"We are processing the transaction in the background. Please wait..."])
+    cache.rpush(bot_key, message)
+
+    # TODO: Record the request
 
     try:
         # Wait for the approve tx to be confirmed before next step
@@ -105,6 +109,10 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
         session.add(user_deposit)
         session.commit()
 
+    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
+    message = json.dumps([tg_user_id, f"The payment is received. Have fun!"])
+    cache.rpush(bot_key, message)
+
 
 def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
 
@@ -129,6 +137,10 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
         session.commit()
 
     record_user_staking(agent_id, wallet_address, amount)
+
+    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
+    message = json.dumps([tg_user_id, f"The staking is in position. Have fun!"])
+    cache.rpush(bot_key, message)
 
 
 def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:

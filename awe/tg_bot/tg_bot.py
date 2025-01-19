@@ -95,6 +95,8 @@ class TGBot:
 
         self.group_chat_contents = {}
 
+        self.stopped = False
+
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -326,26 +328,36 @@ class TGBot:
 
 
     def send_user_notifications(self):
-        while True:
-            bot_key = f"TG_BOT_USER_NOTIFICATIONS_{self.user_agent_id}"
-            message = cache.lpop(bot_key)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-            if message is None:
-                time.sleep(1)
-            else:
-                message_dict = json.loads(message)
-                if len(message_dict) != 2:
-                    return
+        async def task():
+            while not self.stopped:
+                bot_key = f"TG_BOT_USER_NOTIFICATIONS_{self.user_agent_id}"
+                message = cache.lpop(bot_key)
 
-                tg_user_id = message_dict[0]
-                msg = message_dict[1]
-                asyncio.run(self.send_direct_message(tg_user_id, msg))
+                if message is None:
+                    await asyncio.sleep(1)
+                else:
+                    message_dict = json.loads(message)
+                    if len(message_dict) != 2:
+                        continue
+
+                    tg_user_id = message_dict[0]
+                    msg = message_dict[1]
+                    await self.send_direct_message(tg_user_id, msg)
+
+        loop.run_until_complete(task())
+        self.logger.info(f"Notification thread for agent {self.user_agent_id} stopped!")
 
 
     def start(self) -> None:
         self.logger.info("Starting TG Bot...")
 
-        send_user_notification_thread = Thread(target=self.send_user_notifications, daemon=True)
+        send_user_notification_thread = Thread(target=self.send_user_notifications)
         send_user_notification_thread.start()
 
         self.application.run_polling()
+
+        self.stopped = True
+        send_user_notification_thread.join()

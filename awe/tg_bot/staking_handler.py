@@ -8,6 +8,7 @@ from datetime import datetime
 from awe.settings import settings
 import prettytable
 from awe.agent_manager.agent_fund import release_user_staking, ReleaseStakingNotAllowedException
+import time
 
 class StakingHandler(PaymentLimitHandler):
 
@@ -79,9 +80,13 @@ class StakingHandler(PaymentLimitHandler):
         # Send the approve buttons
         reply_markup = await self.get_approve_buttons("user_staking", user_id, user_wallet, amount)
 
+        locking_till = int(time.time()) + settings.tn_agent_staking_locking_days * 86400
+        locking_datetime = datetime.fromtimestamp(locking_till)
+        locking_till_str = locking_datetime.strftime("%Y-%m-%d")
+
         await context.bot.send_message(
             update.effective_chat.id,
-            "Please use the buttons below to approve the transaction",
+            f"{amount}.00 $AWE will be transferred to the system account for staking. You won't be able to get them back until {locking_till_str}. Please use the buttons below to approve the transaction:",
             reply_markup=reply_markup)
 
     async def release_staking(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

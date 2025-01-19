@@ -17,8 +17,8 @@ def update_all_agent_scores(cycle_end_timestamp: int):
 
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
-    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
-    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
+    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a) %H:%M:%S')
+    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a) %H:%M:%S')
 
     logger.info(f"Updating agent scores for cycle: [{start_datetime}, {end_datetime})")
 

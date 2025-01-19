@@ -20,7 +20,7 @@ def update_all_agent_scores(cycle_end_timestamp: int):
     start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a) %H:%M:%S')
     end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a) %H:%M:%S')
 
-    logger.info(f"Updating agent scores for cycle: [{start_datetime}, {end_datetime})")
+    logger.info(f"Updating agent scores for cycle: [{start_datetime} ({cycle_start_timestamp}), {end_datetime} ({cycle_end_timestamp}))")
 
     # Get max staking pool size and max players in this cycle
     max_staking_score, max_player_score = get_max_agent_scores(cycle_start_timestamp, cycle_end_timestamp)
@@ -195,7 +195,7 @@ def get_max_agent_scores(cycle_start_timestamp: int, cycle_end_timestamp: int) -
             if len(page_agent_players.keys()) != 0:
                 page_max_player_score = max(page_agent_players.values())
                 max_player_score = max(page_max_player_score, max_player_score)
-                
+
 
     logger.info(f"Total agents: {total_agents}")
     logger.info(f"Max agent staking score: {max_staking_score}")

@@ -11,6 +11,9 @@ from awe.agent_manager.agent_emissions import update_all_agent_emissions
 from awe.agent_manager.in_agent_emissions import update_all_in_agent_emissions
 import logging
 import traceback
+from awe.db import engine
+from sqlmodel import Session, select
+
 
 logger = logging.getLogger("[Admin API]")
 
@@ -50,12 +53,12 @@ def update_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, 
 
 @router.get("/system/agent-emissions", response_model=List[UserAgentWeeklyEmissions])
 def get_agent_emissions(_: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
-    
+
     page_size = 100
-    
+
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
     last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
-    
+
     with Session(engine) as session:
         statement = select(UserAgentWeeklyEmissions).where(
             UserAgentWeeklyEmissions.day == last_cycle_start
@@ -69,7 +72,7 @@ def get_agent_emissions(_: Annotated[str, Depends(get_admin)], last_cycle_before
 @router.get("/system/agent-emissions/{agent_id}/players", response_model=List[PlayerWeeklyEmissions])
 def get_agent_player_emissions(agent_id: int, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
     page_size = 100
-    
+
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
     last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
 
@@ -87,7 +90,7 @@ def get_agent_player_emissions(agent_id: int, _: Annotated[str, Depends(get_admi
 @router.get("/system/agent-emissions/{agent_id}/stakers", response_model=List[StakerWeeklyEmissions])
 def get_agent_staker_emissions(agent_id: int, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
     page_size = 100
-    
+
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
     last_cycle_start = last_cycle_end - settings.tn_emission_interval_days * 86400
 

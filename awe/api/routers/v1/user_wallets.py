@@ -6,6 +6,8 @@ from sqlmodel import Session, select
 from awe.db import engine
 from awe.models import TGBotUserWallet
 from awe.agent_manager.agent_fund import collect_user_fund
+from awe.cache import cache
+import json
 
 logger = logging.getLogger("[Wallet API]")
 
@@ -57,6 +59,10 @@ def handle_bind_wallet(agent_id: int, tg_user_id: str, wallet_address: str, time
 
         session.add(user_wallet)
         session.commit()
+
+        bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
+        message = json.dumps([tg_user_id, f"Successfully bind your wallet address: {wallet_address}"])
+        cache.rpush(bot_key, message)
 
 
 @router.post("/approve/{agent_id}/{tg_user_id}")

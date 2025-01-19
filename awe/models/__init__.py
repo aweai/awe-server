@@ -17,3 +17,4 @@ from .user_referrals import UserReferrals
 from .user_agent_weekly_emissions import UserAgentWeeklyEmissions
 from .player_weekly_emissions import PlayerWeeklyEmissions
 from .staker_weekly_emissions import StakerWeeklyEmissions
+from .tg_user_dm_chat import TGUserDMChat

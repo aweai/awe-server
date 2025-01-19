@@ -2,7 +2,7 @@ import logging
 from telegram import Update, constants
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes
 from awe.awe_agent.awe_agent import AweAgent
-from awe.models import UserAgentUserInvocations
+from awe.models import UserAgentUserInvocations, TGUserDMChat
 from PIL import Image
 import io
 from pathlib import Path
@@ -17,6 +17,14 @@ from .power_command import power_command
 from .reset_handler import ResetHandler
 from pathlib import Path
 from datetime import datetime
+from awe.db import engine
+from sqlmodel import Session, select
+from typing import Optional
+from threading import Thread
+import time
+from awe.cache import cache
+import json
+
 
 # Skip regular network logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -87,7 +95,14 @@ class TGBot:
 
         self.group_chat_contents = {}
 
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if update.effective_user is None or update.effective_chat is None:
+            return
+
+        user_id = str(update.effective_user.id)
+        chat_id = str(update.effective_chat.id)
 
         start_message = self.tg_bot_config.start_message
         if start_message != "":
@@ -96,11 +111,19 @@ class TGBot:
             prompt = "This is the first time the user comes to you, give the user your best greeting"
             resp = await self.aweAgent.get_response(
                 "[Private chat] " + prompt,
-                context._user_id,
+                user_id,
                 f"{update.effective_chat.id}")
             await self.send_response(resp, update, context)
 
+        if update.effective_chat is not None:
+            await asyncio.to_thread(self.record_dm_chat_id, user_id, chat_id)
+
+
     async def chances_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if update.effective_chat is None:
+            return
+
         if self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="This Memegent has no invocation limit.")
         else:
@@ -154,6 +177,9 @@ class TGBot:
 
     async def respond_dm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        if update.effective_user is None or update.effective_chat is None:
+            return
+
         if not await self.check_limits(update, context, False):
             return
 
@@ -174,15 +200,14 @@ class TGBot:
 
     async def respond_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        if update.effective_user is None or update.effective_chat is None:
+            return
+
         bot_mentioned = False
         entities = update.effective_message.parse_entities(["mention"])
         for k in entities:
             if entities[k] == f"@{self.tg_bot_config.username}":
                 bot_mentioned = True
-
-        if update.effective_chat is None:
-            await self.send_response({"text": "Chat ID not found"}, update, context)
-            return
 
         chat_id = f"{update.effective_chat.id}"
 
@@ -232,6 +257,47 @@ class TGBot:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="My brain is messed up...try me again")
 
 
+    def record_dm_chat_id(self, tg_user_id: str, dm_chat_id: str):
+        with Session(engine) as session:
+            statement = select(TGUserDMChat).where(
+                TGUserDMChat.user_agent_id == self.user_agent_id,
+                TGUserDMChat.tg_user_id == tg_user_id
+            )
+            user_dm_chat = session.exec(statement).first()
+
+            if user_dm_chat is None:
+                user_dm_chat = TGUserDMChat(
+                    user_agent_id=self.user_agent_id,
+                    tg_user_id=tg_user_id,
+                    chat_id=dm_chat_id
+                )
+            else:
+                user_dm_chat.chat_id = dm_chat_id
+
+            session.add(user_dm_chat)
+            session.commit()
+
+
+    def get_dm_chat_id(self, tg_user_id: str) -> Optional[TGUserDMChat]:
+        with Session(engine) as session:
+            # Get active user session
+            statement = select(TGUserDMChat).where(
+                    TGUserDMChat.user_agent_id == self.user_agent_id,
+                    TGUserDMChat.tg_user_id == tg_user_id
+                )
+            return session.exec(statement).first()
+
+
+    async def send_direct_message(self, tg_user_id: str, msg: str):
+        user_dm_chat = await asyncio.to_thread(self.get_dm_chat_id, tg_user_id)
+
+        if user_dm_chat is None:
+            self.logger.error("user dm chat not found")
+            return
+
+        await self.application.bot.send_message(user_dm_chat.chat_id, msg)
+
+
     def log_interact(self, tg_user_id: str, chat_id: str, input: str, output: str | dict):
         day_folder = datetime.today().strftime('%Y-%m-%d')
         user_folder = Path("persisted_data") / "chats" / day_folder / tg_user_id
@@ -259,6 +325,27 @@ class TGBot:
                 f.write(f"[{current_time}] [Bot] {output}\n")
 
 
+    def send_user_notifications(self):
+        while True:
+            bot_key = f"TG_BOT_USER_NOTIFICATIONS_{self.user_agent_id}"
+            message = cache.lpop(bot_key)
+
+            if message is None:
+                time.sleep(1)
+            else:
+                message_dict = json.loads(message)
+                if len(message_dict) != 2:
+                    return
+
+                tg_user_id = message_dict[0]
+                msg = message_dict[1]
+                asyncio.run(self.send_direct_message(tg_user_id, msg))
+
+
     def start(self) -> None:
         self.logger.info("Starting TG Bot...")
+
+        send_user_notification_thread = Thread(target=self.send_user_notifications, daemon=True)
+        send_user_notification_thread.start()
+
         self.application.run_polling()

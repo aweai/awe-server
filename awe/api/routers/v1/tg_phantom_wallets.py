@@ -17,6 +17,8 @@ import json
 import logging
 import traceback
 
+from awe.cache import cache
+
 from awe.agent_manager.agent_fund import collect_user_fund
 
 logger = logging.getLogger("[Phantom Wallet API]")
@@ -207,6 +209,10 @@ def handle_phantom_verify_callback(
         user_wallet.address = wallet
         session.add(user_wallet)
         session.commit()
+
+    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
+    message = json.dumps([tg_user_id, f"Successfully bind your wallet address: {wallet}"])
+    cache.rpush(bot_key, message)
 
     # Get the TG Bot username to jump back
     with Session(engine) as session:

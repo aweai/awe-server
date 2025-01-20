@@ -56,7 +56,9 @@ def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
             statement = select(TgUserDeposit.tg_user_id, func.count(TgUserDeposit.id)).where(
                 TgUserDeposit.created_at >= cycle_start_timestamp,
                 TgUserDeposit.created_at < cycle_end_timestamp,
-                TgUserDeposit.user_agent_id == agent_id
+                TgUserDeposit.user_agent_id == agent_id,
+                TgUserDeposit.tx_hash.is_not(None),
+                TgUserDeposit.tx_hash != ""
             ).group_by(TgUserDeposit.tg_user_id).order_by(TgUserDeposit.tg_user_id.asc()).offset(current_page * page_size).limit(page_size)
 
             user_deposit_count = session.exec(statement).all()

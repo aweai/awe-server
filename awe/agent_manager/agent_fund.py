@@ -49,11 +49,7 @@ def collect_user_fund(
 
 def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
 
-    # TODO: Record the request
-
-    # Wait for the approve tx to be confirmed before next step
-    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
-
+    # Record the request
     with Session(engine) as session:
 
         # Get user wallet info from db
@@ -62,6 +58,25 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
 
         statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
         user_agent = session.exec(statement).first()
+
+        user_deposit = TgUserDeposit(
+            user_agent_id=agent_id,
+            tg_user_id=tg_user_id,
+            user_agent_round=user_agent.agent_data.current_round,
+            address=user_wallet.address,
+            amount=amount,
+            approve_tx_hash=approve_tx
+        )
+
+        session.add(user_deposit)
+        session.commit()
+        session.refresh(user_deposit)
+        user_deposit_id = user_deposit.id
+
+    # Wait for the approve tx to be confirmed before next step
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
+
+    with Session(engine) as session:
 
         # We will use the agent price as the amount here
         amount = user_agent.awe_agent.awe_token_config.user_price
@@ -94,15 +109,12 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
     # Record the transfer tx
     with Session(engine) as session:
 
-        user_deposit = TgUserDeposit(
-            user_agent_id=agent_id,
-            tg_user_id=tg_user_id,
-            user_agent_round=user_agent.agent_data.current_round,
-            address=user_wallet.address,
-            amount=amount,
-            tx_hash=tx
+        statement = select(TgUserDeposit).where(
+            TgUserDeposit.id == user_deposit_id
         )
 
+        user_deposit = session.exec(statement).first()
+        user_deposit.tx_hash = tx
         session.add(user_deposit)
         session.commit()
 

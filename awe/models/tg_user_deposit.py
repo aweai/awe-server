@@ -12,7 +12,8 @@ class TgUserDeposit(SQLModel, table=True):
     user_agent_round: int = Field(nullable=False)
     address: str = Field(nullable=False)
     amount: int = Field(nullable=False)
-    tx_hash: str = Field(nullable=False)
+    approve_tx_hash: str = Field(nullable=True)
+    tx_hash: str = Field(nullable=True)
     created_at: int = Field(index=True, nullable=False, default_factory=unix_timestamp_in_seconds)
 
     @classmethod
@@ -22,7 +23,9 @@ class TgUserDeposit(SQLModel, table=True):
                 TgUserDeposit.user_agent_id == UserAgentData.user_agent_id,
                 TgUserDeposit.user_agent_id == user_agent_id,
                 TgUserDeposit.tg_user_id == tg_user_id,
-                TgUserDeposit.user_agent_round == UserAgentData.current_round
+                TgUserDeposit.user_agent_round == UserAgentData.current_round,
+                TgUserDeposit.tx_hash.is_not(None),
+                TgUserDeposit.tx_hash != ""
                 )
             result = session.exec(statement).first()
             if result is None:

@@ -48,10 +48,15 @@ class StakingHandler(PaymentLimitHandler):
             table = prettytable.PrettyTable(["ID", "Staking", "Staked at", "Locked until"])
 
             for staking_item in staking_list:
-                dt = datetime.fromtimestamp(staking_item.created_at)
-                dt_str = dt.strftime("%Y-%m-%d")
-                rt = datetime.fromtimestamp(staking_item.created_at + settings.tn_user_staking_locking_days * 86400)
-                rt_str = rt.strftime("%Y-%m-%d")
+                if staking_item.tx_hash is None or staking_item.tx_hash == "":
+                    dt_str = "Pending"
+                    rt_str = "-"
+                else:
+                    dt = datetime.fromtimestamp(staking_item.created_at)
+                    dt_str = dt.strftime("%Y-%m-%d")
+                    rt = datetime.fromtimestamp(staking_item.created_at + settings.tn_user_staking_locking_days * 86400)
+                    rt_str = rt.strftime("%Y-%m-%d")
+
                 table.add_row([staking_item.id, f"{staking_item.amount}.00", dt_str, rt_str])
 
             msg = msg + f"<pre>{table}</pre>\n\n"

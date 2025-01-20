@@ -13,8 +13,7 @@ from threading import Lock
 from typing import Dict
 from awe.models.utils import unix_timestamp_in_seconds
 from .agent_stats import record_user_withdraw, record_user_payment, record_user_staking, record_user_staking_release
-import json
-from awe.cache import cache
+from awe.tg_bot.user_notification import send_user_notification
 
 logger = logging.getLogger("[Agent Fund]")
 
@@ -34,28 +33,26 @@ def collect_user_fund(
     tg_user_id: str,
     approve_tx: str,
 ):
-    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
-    message = json.dumps([tg_user_id, f"We are processing the transaction in the background. Please wait..."])
-    cache.rpush(bot_key, message)
-
-    # TODO: Record the request
+    send_user_notification(agent_id, tg_user_id, f"We are processing the transaction in the background. Please wait...")
 
     try:
-        # Wait for the approve tx to be confirmed before next step
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
-
         if action == "user_payment":
-            collect_user_payment(agent_id, tg_user_id)
+            collect_user_payment(agent_id, tg_user_id, approve_tx)
 
         elif action == "user_staking":
-            collect_user_staking(agent_id, tg_user_id, amount)
+            collect_user_staking(agent_id, tg_user_id, amount, approve_tx)
 
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())
 
 
-def collect_user_payment(agent_id: int, tg_user_id: str):
+def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
+
+    # TODO: Record the request
+
+    # Wait for the approve tx to be confirmed before next step
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
 
     with Session(engine) as session:
 
@@ -109,12 +106,30 @@ def collect_user_payment(agent_id: int, tg_user_id: str):
         session.add(user_deposit)
         session.commit()
 
-    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
-    message = json.dumps([tg_user_id, f"The payment is received. Have fun!"])
-    cache.rpush(bot_key, message)
+    send_user_notification(agent_id, tg_user_id, "The payment is received. Have fun!")
 
 
-def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
+def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx: str):
+
+    # Record the request
+    with Session(engine) as session:
+
+        # Record the transfer tx
+        user_staking = UserStaking(
+            tg_user_id=tg_user_id,
+            user_agent_id=agent_id,
+            amount=amount,
+            approve_tx_hash=approve_tx
+        )
+
+        session.add(user_staking)
+        session.commit()
+        session.refresh(user_staking)
+        staking_id = user_staking.id
+
+
+    # Wait for the approve tx to be confirmed before next step
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
 
     with Session(engine) as session:
 
@@ -122,25 +137,23 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int):
         statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
         wallet_address = user_wallet.address
+
         # Collect user staking
         tx = awe_on_chain.collect_user_staking(user_wallet.address, amount)
 
-        # Record the transfer tx
-        user_staking = UserStaking(
-            tg_user_id=tg_user_id,
-            user_agent_id=agent_id,
-            amount=amount,
-            tx_hash=tx
-        )
+        # Update the staking record
 
+        statement = select(UserStaking).where(
+            UserStaking.id == staking_id
+        )
+        user_staking = session.exec(statement).first()
+        user_staking.tx_hash = tx
         session.add(user_staking)
         session.commit()
 
     record_user_staking(agent_id, wallet_address, amount)
 
-    bot_key = f"TG_BOT_USER_NOTIFICATIONS_{agent_id}"
-    message = json.dumps([tg_user_id, f"The staking is in position. Have fun!"])
-    cache.rpush(bot_key, message)
+    send_user_notification(agent_id, tg_user_id, "The staking is in position. Have fun!")
 
 
 def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:
@@ -222,6 +235,9 @@ def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet
 
             if user_staking is None:
                 raise ReleaseStakingNotAllowedException("Staking not found")
+
+            if user_staking.tx_hash is None or user_staking.tx_hash == "":
+                raise ReleaseStakingNotAllowedException("Staking not confirmed")
 
             now = unix_timestamp_in_seconds()
             if now - user_staking.created_at < settings.tn_user_staking_locking_days * 86400:

@@ -215,7 +215,9 @@ def get_agent_stakings(agent_ids: List[int], day_timestamp: int) -> Dict[int, in
         statement = select(UserStaking.user_agent_id, func.sum(UserStaking.amount)).where(
             UserStaking.user_agent_id.in_(agent_ids),
             or_(UserStaking.released_at.is_(None), UserStaking.released_at >= end_timestamp),
-            UserStaking.created_at < start_timestamp
+            UserStaking.created_at < start_timestamp,
+            UserStaking.tx_hash.is_not(None),
+            UserStaking.tx_hash != ""
         ).group_by(UserStaking.user_agent_id)
 
         user_stakings = session.exec(statement).all()

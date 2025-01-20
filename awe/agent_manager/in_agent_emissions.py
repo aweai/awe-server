@@ -167,7 +167,9 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
             statement = select(UserStaking).where(
                 UserStaking.user_agent_id == agent_id,
                 UserStaking.created_at < cycle_end_timestamp,
-                UserStaking.released_at.is_(None)
+                UserStaking.released_at.is_(None),
+                UserStaking.tx_hash.is_not(None),
+                UserStaking.tx_hash != ""
             ).order_by(UserStaking.id.asc()).offset(current_page * page_size).limit(page_size)
 
             user_stakings = session.exec(statement).all()

@@ -1,6 +1,6 @@
 from .remote_llm import RemoteLLM
-from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool
-from ..models.awe_agent import AweAgent as AgentConfig
+from .tools import RemoteSDTool, AweTransferTool, AweAgentBalanceTool, RoundTimeTool, SolPriceTool, BatchAweTransferTool
+from awe.models.user_agent import UserAgent as UserAgentConfig
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables.config import RunnableConfig
 from typing import Any, TypedDict, Annotated, Literal, Union
@@ -42,16 +42,17 @@ class State(TypedDict):
 
 class AweAgent:
 
-    def __init__(self, user_agent_id: int, config: AgentConfig) -> None:
+    def __init__(self, user_agent_id: int, config: UserAgentConfig) -> None:
 
-        self.config = config
+        self.user_agent = config
+        self.config = config.awe_agent
         self.user_agent_id = user_agent_id
 
         verbose_output = settings.log_level == "DEBUG"
 
         if settings.llm_type == LLMType.Local:
             self.llm = RemoteLLM(
-                llm_config=config.llm_config
+                llm_config=self.config.llm_config
             )
         elif settings.llm_type == LLMType.OpenAI:
             self.llm = ChatOpenAI(
@@ -66,12 +67,16 @@ class AweAgent:
 
         tools = []
 
-        if config.image_generation_enabled:
-            tools.append(RemoteSDTool(task_args=config.image_generation_args, user_agent_id=user_agent_id))
+        tools.append(RoundTimeTool(user_agent_id=user_agent_id))
 
-        if config.awe_token_enabled:
-            tools.append(AweTransferTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
-            tools.append(AweAgentBalanceTool(awe_token_config=config.awe_token_config, user_agent_id=user_agent_id))
+        if self.config.image_generation_enabled:
+            tools.append(RemoteSDTool(task_args=self.config.image_generation_args, user_agent_id=user_agent_id))
+
+        if self.config.awe_token_enabled:
+            tools.append(AweTransferTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
+            tools.append(BatchAweTransferTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
+            tools.append(AweAgentBalanceTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
+            tools.append(SolPriceTool())
 
         self.llm_with_tools = self.llm.bind_tools(tools, parallel_tool_calls=False, strict=True)
 
@@ -116,7 +121,7 @@ class AweAgent:
 
         if len(state["messages"]) == 1:
             logger.debug("Only 1 message. Add system prompt.")
-            system_prompt = SystemMessage(self.config.llm_config.prompt_preset)
+            system_prompt = SystemMessage(self.get_system_prompt())
             user_message = state["messages"][-1]
             delete_message = RemoveMessage(id=user_message.id)
             new_user_message = HumanMessage(content=user_message.content)
@@ -158,6 +163,15 @@ class AweAgent:
         messages = current_state.values["messages"]
         deleted_messages = [RemoveMessage(id=m.id) for m in messages]
         await self.graph.aupdate_state(config, {"messages": deleted_messages}, as_node="reset")
+
+
+    def get_system_prompt(self) -> str:
+        memegent_prompt = self.config.llm_config.prompt_preset
+
+        chat_mode_prompt = "Players will interact will you in either private chat or group chat. The chat mode is the prefix of each message. Do not mention the chat mode, just respond accordingly."
+        chat_mode_prompt += f"\nYour name is {self.user_agent.tg_bot.username} in the group chat"
+
+        return f"{memegent_prompt}\n{chat_mode_prompt}"
 
 
     async def get_response(self, input: str, tg_user_id: str, thread_id: str = None) -> dict:

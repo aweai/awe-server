@@ -12,6 +12,7 @@ import spl.token.instructions as spl_token
 import time
 from awe.settings import settings
 from awe.celery import app
+from typing import List
 
 class AweOnSolana(AweOnChain):
 
@@ -69,6 +70,17 @@ class AweOnSolana(AweOnChain):
             args=(dest_owner_address, amount)
         )
         self.logger.info("Sent transfer to user task to the queue")
+        return task.get()
+
+
+    def batch_transfer_to_users(self, owner_addresses: List[str], amounts: List[int]) -> str:
+        # Transfer AWE from the system account to the list of given wallet address
+        # Return the tx address
+        task = app.send_task(
+            name='awe.blockchain.solana.tasks.transfer_to_user.batch_transfer_to_users',
+            args=(owner_addresses, amounts)
+        )
+        self.logger.info("Sent batch transfer to users task to the queue")
         return task.get()
 
 

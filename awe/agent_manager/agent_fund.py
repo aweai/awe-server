@@ -10,7 +10,7 @@ from awe.db import engine
 import logging
 import traceback
 from threading import Lock
-from typing import Dict
+from typing import Dict, List
 from awe.models.utils import unix_timestamp_in_seconds
 from .agent_stats import record_user_withdraw, record_user_payment, record_user_staking, record_user_staking_release
 from awe.tg_bot.user_notification import send_user_notification
@@ -203,29 +203,106 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
             user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote - amount
 
             session.add(user_agent.agent_data)
+
+            # Record the transfer
+            user_withdraw = TgUserWithdraw(
+                user_agent_id=agent_id,
+                tg_user_id=tg_user_id,
+                user_agent_round=current_round,
+                address=user_address,
+                amount=amount
+            )
+
+            session.add(user_withdraw)
             session.commit()
+            session.refresh(user_withdraw)
 
     # Send the transaction
     tx = awe_on_chain.transfer_to_user(user_address, amount)
 
+    # Record the tx
+    with Session(engine) as session:
+        user_withdraw.tx_hash = tx
+        session.add(user_withdraw)
+        session.commit()
+
     # Record stats
     record_user_withdraw(agent_id, user_address, amount)
 
-    # Record the tx
-    with Session(engine) as session:
-        user_withdraw = TgUserWithdraw(
-            user_agent_id=agent_id,
-            tg_user_id=tg_user_id,
-            user_agent_round=current_round,
-            address=user_address,
-            amount=amount,
-            tx_hash=tx
-        )
-
-        session.add(user_withdraw)
-
     return tx
 
+
+def batch_transfer_to_users(agent_id: int, user_ids: List[str], user_addresses: List[str], amounts: List[int]) -> str:
+
+    if len(user_ids) > 20:
+        raise Exception("number of users exceeds the maximum allowed in a single transaction")
+
+    # Lock the agent to prevent race condition
+    if agent_id not in agent_locks:
+        agent_locks[agent_id] = Lock()
+
+    max_amount = max(amounts)
+    total_amount = sum(amounts)
+
+    with agent_locks[agent_id]:
+        with Session(engine) as session:
+            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+            user_agent = session.exec(statement).first()
+
+            current_round = user_agent.agent_data.current_round
+
+            if max_amount > user_agent.awe_agent.awe_token_config.max_token_per_tx:
+                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
+
+            if total_amount + user_agent.agent_data.awe_token_round_transferred > user_agent.awe_agent.awe_token_config.max_token_per_round or user_agent.agent_data.awe_token_quote < total_amount:
+                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
+
+            # Update the data in db first
+
+            # Update round data
+            user_agent.agent_data.awe_token_round_transferred = UserAgentData.awe_token_round_transferred + total_amount
+
+            # Update game pool
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote - total_amount
+
+            session.add(user_agent.agent_data)
+
+            # Record the withdraws
+            user_withdraws: List[TgUserWithdraw] = []
+
+            for idx, user_id in enumerate(user_ids):
+                user_withdraw = TgUserWithdraw(
+                    user_agent_id=agent_id,
+                    tg_user_id=user_id,
+                    user_agent_round=current_round,
+                    address=user_addresses[idx],
+                    amount=amounts[idx]
+                )
+
+                session.add(user_withdraw)
+                user_withdraws.append(user_withdraw)
+
+            session.commit()
+
+            for user_withdraw in user_withdraws:
+                session.refresh(user_withdraw)
+
+    # Send the transaction
+    tx = awe_on_chain.batch_transfer_to_users(user_addresses, amounts)
+
+    # Record the transaction
+    with Session(engine) as session:
+        for user_withdraw in user_withdraws:
+            user_withdraw.tx_hash = tx
+            session.add(user_withdraw)
+
+        session.commit()
+
+    # Record stats
+    for user_withdraw in user_withdraws:
+        record_user_withdraw(agent_id, user_withdraw.address, user_withdraw.amount)
+
+    return tx
 
 def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet_address: str) -> str:
 

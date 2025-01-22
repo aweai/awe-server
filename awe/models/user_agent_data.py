@@ -11,6 +11,7 @@ class UserAgentData(SQLModel, table=True):
     # Agent state
     awe_token_round_transferred: Annotated[int, Field(default=0)] = 0
     current_round: Annotated[int, Field(default=1)] = 1
+    current_round_started_at: Annotated[int, Field(default=0)] = 0
 
     # Game pool
     awe_token_quote: Annotated[int, Field(default=0)] = 0

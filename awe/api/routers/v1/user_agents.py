@@ -141,13 +141,22 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
         logger.debug(str(e))
         raise HTTPException(status_code=401, detail=str(e))
 
-    user_agent_in_db.name = user_agent.name
-    user_agent_in_db.tg_bot = user_agent.tg_bot
-    user_agent_in_db.awe_agent = user_agent.awe_agent
-    user_agent_in_db.enabled = user_agent.enabled
-    user_agent_in_db.updated_at = unix_timestamp_in_seconds()
     with Session(engine) as session:
+
+        user_agent_in_db.name = user_agent.name
+        user_agent_in_db.tg_bot = user_agent.tg_bot
+        user_agent_in_db.awe_agent = user_agent.awe_agent
+        user_agent_in_db.enabled = user_agent.enabled
+        user_agent_in_db.updated_at = unix_timestamp_in_seconds()
+
         session.add(user_agent_in_db)
+
+        if user_agent.enabled:
+            agent_data = user_agent.agent_data
+            if agent_data.current_round_started_at == 0:
+                agent_data.current_round_started_at = unix_timestamp_in_seconds()
+                session.add(agent_data)
+
         session.commit()
         session.refresh(user_agent_in_db)
 
@@ -246,7 +255,7 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
 
 
 @router.post("/{agent_id}/round", response_model=UserAgentData)
-def reset_round_data(agent_id, user_address: Annotated[str, Depends(get_current_user)]):
+def start_new_round(agent_id, user_address: Annotated[str, Depends(get_current_user)]):
     with Session(engine) as session:
         statement = select(func.count(col(UserAgent.id))).where(
             UserAgent.id == agent_id,
@@ -262,6 +271,7 @@ def reset_round_data(agent_id, user_address: Annotated[str, Depends(get_current_
 
         agent_data.awe_token_round_transferred = 0
         agent_data.current_round = UserAgentData.current_round + 1
+        agent_data.current_round_started_at = unix_timestamp_in_seconds()
 
         session.add(agent_data)
         session.commit()

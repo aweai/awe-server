@@ -17,9 +17,9 @@ class AweTransferInput(BaseModel):
 
 
 class AweTransferTool(AweTokenTool):
-    name: str = "TransferAweToken"
+    name: str = "SingleTransferAweToken"
     description: str =  (
-        "Useful for when you need to transfer the AWE tokens to user."
+        "Transfer the AWE tokens to the current player in private chat"
     )
 
     args_schema: Type[BaseModel] = AweTransferInput

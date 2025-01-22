@@ -101,6 +101,10 @@ class AweSettings(BaseSettings):
     langsmith_endpoint: Annotated[Optional[str], Field(default=None)] = None
     langsmith_project: Annotated[Optional[str], Field(default=None)] = None
 
+    # Coinmarketcap API
+    cmc_api_key: str
+
+    group_chat_history_length: int = 50
 
     def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 

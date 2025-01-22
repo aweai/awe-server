@@ -1,6 +1,7 @@
 
 from abc import ABC, abstractmethod
 import logging
+from typing import List
 
 logger = logging.getLogger("[AweOnChain]")
 
@@ -19,6 +20,12 @@ class AweOnChain(ABC):
     @abstractmethod
     def transfer_to_user(self, dest_owner_address: str, amount: int) -> str:
         # Transfer AWE from the system account to the given wallet address
+        # Return the tx address
+        pass
+
+    @abstractmethod
+    def batch_transfer_to_users(self, owner_addresses: List[str], amounts: List[int]) -> str:
+        # Transfer AWE from the system account to the list of given wallet address
         # Return the tx address
         pass
 

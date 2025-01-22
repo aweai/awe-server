@@ -9,5 +9,5 @@ class TgUserWithdraw(SQLModel, table=True):
     user_agent_round: int = Field(nullable=False)
     address: str = Field(nullable=False)
     amount: int = Field(nullable=False)
-    tx_hash: str = Field(nullable=False)
+    tx_hash: str = Field(nullable=True)
     created_at: int = Field(index=True, nullable=False, default_factory=unix_timestamp_in_seconds)

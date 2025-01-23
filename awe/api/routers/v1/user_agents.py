@@ -152,7 +152,7 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
         session.add(user_agent_in_db)
 
         if user_agent.enabled:
-            agent_data = user_agent.agent_data
+            agent_data = user_agent_in_db.agent_data
             if agent_data.current_round_started_at == 0:
                 agent_data.current_round_started_at = unix_timestamp_in_seconds()
                 session.add(agent_data)

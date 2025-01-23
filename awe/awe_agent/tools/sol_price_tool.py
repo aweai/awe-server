@@ -17,7 +17,7 @@ class SolPriceTool(BaseTool):
         resp = requests.get(
             "https://pro-api.coinmarketcap.com/v2/tools/price-conversion",
             params={
-                "symbol": "SOL",
+                "id": 5426,
                 "convert": "USD",
                 "amount": 1
             },
@@ -38,9 +38,12 @@ class SolPriceTool(BaseTool):
                 if "USD" in data["data"]["quote"]:
                     return data["data"]["quote"]["USD"]["price"]
 
+        logger.error(data)
+        raise Exception("Invalid response from API")
+
 
     async def _arun(self) -> str:
-        return asyncio.to_thread(self.get_sol_price)
+        return await asyncio.to_thread(self.get_sol_price)
 
 
     def _run(self, _: str) -> str:

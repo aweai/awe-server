@@ -12,7 +12,7 @@ logger = logging.getLogger("[Awe Batch Transfer Tool]")
 
 
 class BatchAweTransferInput(BaseModel):
-    user_ids: Annotated[List[str], Field(description="the list of user id to transfer")]
+    user_ids: Annotated[List[str], Field(description="the list of user id to transfer, username is not working")]
     amounts: Annotated[List[int], Field(description="the list of amount of tokens to transfer")]
 
 

@@ -150,7 +150,7 @@ class AweAgent:
 
             tool_name = tool_message.name
 
-            if tool_name in ["TransferAweToken", "GenerateImage"]:
+            if tool_name in ["SingleTransferAweToken", "BatchTransferAweToken", "GenerateImage"]:
                 return "__end__"
 
         # Tool call failed. Return the message to agent

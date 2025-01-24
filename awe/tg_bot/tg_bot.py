@@ -143,20 +143,6 @@ class TGBot:
         image.save(image_bytes, format="JPEG")
         return image_bytes.getvalue()
 
-    def update_group_chat_history(self, messages: List[str], chat_id: str):
-        if chat_id not in self.group_chat_contents:
-            self.group_chat_contents[chat_id] = deque()
-
-        for message in messages:
-            self.group_chat_contents[chat_id].append(message)
-            if len(self.group_chat_contents[chat_id]) > settings.group_chat_history_length:
-                self.group_chat_contents[chat_id].popleft()
-
-    def get_group_chat_history(self, chat_id: str):
-        if chat_id not in self.group_chat_contents:
-            return ""
-        return "\n".join(self.group_chat_contents[chat_id])
-
     async def check_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
 
         # Check payment limit
@@ -198,15 +184,14 @@ class TGBot:
         if update.effective_user is None or update.effective_chat is None:
             return
 
+        chat_id = f"{update.effective_chat.id}"
+        user_id = f"{update.effective_user.id}"
+
         bot_mentioned = False
         entities = update.effective_message.parse_entities(["mention"])
         for k in entities:
             if entities[k] == f"@{self.tg_bot_config.username}":
                 bot_mentioned = True
-
-        chat_id = f"{update.effective_chat.id}"
-
-        messages = []
 
         # Record messages in the channel for agent respond context
         user_text = update.message.text
@@ -217,38 +202,25 @@ class TGBot:
 
         user_message = f"{user_name} (id: {update.effective_user.id}): {user_text}"
 
-        messages = [user_message]
-
         if bot_mentioned:
             if not await self.check_limits(update, context, True):
                 return
 
-            user_id = str(update.effective_user.id)
-            history_messages = await asyncio.to_thread(self.get_group_chat_history, chat_id)
-
-            input = "[Group chat]\n" + history_messages + "\n" + user_message
-
             resp = await self.aweAgent.get_response(
-                input,
-                user_id
+                user_message,
+                user_id,
+                chat_id
             )
 
             await self.send_response(resp, update, context)
-
-            bot_message = f"{self.tg_bot_config.username}: "
-
-            if 'image' in resp and resp["image"] is not None and resp["image"] != "":
-                bot_message += f"[Send an image]"
-                messages.append(bot_message)
-            elif 'text' in resp and resp["text"] is not None and resp["text"] != "":
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=resp["text"])
-                bot_message += resp["text"]
-                messages.append(bot_message)
-
             await self.increase_invocation(user_id)
             await asyncio.to_thread(self.log_interact, user_id, chat_id, input, resp)
-
-        await asyncio.to_thread(self.update_group_chat_history, messages, chat_id)
+        else:
+            await self.aweAgent.add_message(
+                user_message,
+                user_id,
+                chat_id
+            )
 
 
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

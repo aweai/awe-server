@@ -115,6 +115,10 @@ class AweAgent:
     async def chatbot(self, state: State, config: RunnableConfig):
 
         tg_user_id = config.get("configurable", {}).get("tg_user_id")
+        add_message_only = config.get("configurable", {}).get("add_message_only")
+
+        if add_message_only:
+            return {"messages": []}
 
         # Log the invocation
         await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.LLM)
@@ -174,26 +178,19 @@ class AweAgent:
         return f"{memegent_prompt}\n{chat_mode_prompt}"
 
 
-    async def get_response(self, input: str, tg_user_id: str, thread_id: str = None) -> dict:
+    async def get_response(self, input: str, tg_user_id: str, thread_id: str) -> dict:
 
         output = ""
 
         try:
-            if thread_id is not None:
-                resp = await self.graph.ainvoke(
-                    {"messages": [("user", input)]},
-                    config={
-                        "configurable": {"thread_id": thread_id, "tg_user_id": tg_user_id},
-                        "recursion_limit": settings.agent_recursion_limit
-                    },
-                    debug=settings.log_level == "DEBUG"
-                )
-            else:
-                resp = await self.graph.ainvoke(
-                    {"messages": [("user", input)]},
-                    config={'configurable': {'tg_user_id': tg_user_id}, "recursion_limit": settings.agent_recursion_limit},
-                    debug=settings.log_level == "DEBUG"
-                )
+            resp = await self.graph.ainvoke(
+                {"messages": [("user", input)]},
+                config={
+                    "configurable": {"thread_id": thread_id, "tg_user_id": tg_user_id, "add_message_only": False},
+                    "recursion_limit": settings.agent_recursion_limit
+                },
+                debug=settings.log_level == "DEBUG"
+            )
 
             logger.debug("response from graph ainvoke")
             logger.debug(resp)
@@ -203,7 +200,6 @@ class AweAgent:
             if 'messages' in resp:
                 if len(resp["messages"]) > 0:
                     output = resp["messages"][-1].content
-
 
         except Exception as e:
             logger.error(e)
@@ -220,3 +216,18 @@ class AweAgent:
             resp_dict["text"] = output
 
         return resp_dict
+
+
+    async def add_message(self, message: str, tg_user_id: str, thread_id: str):
+        try:
+            await self.graph.ainvoke(
+                {"messages": [("user", message)]},
+                config={
+                    "configurable": {"thread_id": thread_id, "tg_user_id": tg_user_id, "add_message_only": True},
+                    "recursion_limit": settings.agent_recursion_limit
+                },
+                debug=settings.log_level == "DEBUG"
+            )
+        except Exception as e:
+            logger.error(e)
+            logger.error(traceback.format_exc())

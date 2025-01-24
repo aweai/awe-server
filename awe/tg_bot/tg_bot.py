@@ -119,11 +119,11 @@ class TGBot:
         if update.effective_chat is None:
             return
 
-        if self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="This Memegent has no invocation limit.")
-        else:
-            invocation_chances, payment_chances = await self.payment_limit_handler.get_payment_chances(update)
+        invocation_chances, payment_chances = await self.payment_limit_handler.get_payment_chances(update)
 
+        if invocation_chances == -1:
+            msg = "This Memegent has no invocation limit."
+        else:
             msg = f"{invocation_chances} messages left for this play."
 
             if self.aweAgent.config.awe_token_config.max_payment_per_round != 0:
@@ -131,7 +131,7 @@ class TGBot:
             else:
                 msg = msg + "\n\nReset by paying again."
 
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
 
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -214,7 +214,7 @@ class TGBot:
 
             await self.send_response(resp, update, context)
             await self.increase_invocation(user_id)
-            await asyncio.to_thread(self.log_interact, user_id, chat_id, input, resp)
+            await asyncio.to_thread(self.log_interact, user_id, chat_id, user_message, resp)
         else:
             await self.aweAgent.add_message(
                 user_message,

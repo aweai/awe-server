@@ -123,20 +123,27 @@ class PaymentLimitHandler(LimitHandler):
 
         user_invocation = await asyncio.to_thread(UserAgentUserInvocations.get_user_invocation, self.user_agent_id, user_id)
 
-        if user_invocation is None:
-            return self.aweAgent.config.awe_token_config.max_invocation_per_payment, self.aweAgent.config.awe_token_config.max_payment_per_round
+        if self.aweAgent.config.awe_token_config.max_invocation_per_payment == 0:
+            invocation_chances = -1
         else:
-            invocation_chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
+            if user_invocation is None:
+                invocation_chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment
+            else:
+                invocation_chances = self.aweAgent.config.awe_token_config.max_invocation_per_payment - user_invocation.payment_invocations
+                if invocation_chances < 0:
+                    invocation_chances = 0
 
-            if invocation_chances <= 0:
-                invocation_chances = 0
+        if self.aweAgent.config.awe_token_config.max_payment_per_round == 0:
+            payment_chances = -1
+        else:
+            if user_invocation is None:
+                payment_chances = self.aweAgent.config.awe_token_config.max_payment_per_round
+            else:
+                payment_chances = self.aweAgent.config.awe_token_config.max_payment_per_round - user_invocation.round_payments
+                if payment_chances < 0:
+                    payment_chances = 0
 
-            payment_chances = self.aweAgent.config.awe_token_config.max_payment_per_round - user_invocation.round_payments
-
-            if payment_chances <= 0:
-                payment_chances = 0
-
-            return invocation_chances, payment_chances
+        return invocation_chances, payment_chances
 
     async def check_user_balance(self, address: str, minimum: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         # Check the user balance

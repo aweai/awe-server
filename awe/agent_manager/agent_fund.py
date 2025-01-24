@@ -59,6 +59,14 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
         statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
         user_agent = session.exec(statement).first()
 
+        # We will use the agent price as the amount here
+        amount = user_agent.awe_agent.awe_token_config.user_price
+        user_wallet_address = user_wallet.address
+        agent_creator_wallet = user_agent.user_address
+        game_pool_division = user_agent.awe_agent.awe_token_config.game_pool_division
+
+        pool_share, creator_share, _ = settings.tn_share_user_payment(game_pool_division, amount)
+
         user_deposit = TgUserDeposit(
             user_agent_id=agent_id,
             tg_user_id=tg_user_id,
@@ -76,37 +84,14 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
     # Wait for the approve tx to be confirmed before next step
     awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
 
-    with Session(engine) as session:
-
-        # We will use the agent price as the amount here
-        amount = user_agent.awe_agent.awe_token_config.user_price
-        game_pool_division = user_agent.awe_agent.awe_token_config.game_pool_division
-
-        # Collect user payment
-        tx = awe_on_chain.collect_user_payment(user_wallet.address, user_agent.user_address, amount, game_pool_division)
-
-        pool_share, creator_share, _ = settings.tn_share_user_payment(game_pool_division, amount)
-
-        if pool_share != 0:
-            # Add agent pool
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
-
-            session.add(user_agent.agent_data)
-            session.commit()
-            session.refresh(user_agent)
-
-        # Reset user payment invocation count
-        UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
-
-        user_address = user_wallet.address
-
-    # Activate user referral
-    UserReferrals.activate(tg_user_id)
+    # Collect user payment
+    tx = awe_on_chain.collect_user_payment(user_wallet_address, agent_creator_wallet, amount, game_pool_division)
 
     # Record stats
-    record_user_payment(agent_id, user_address, pool_share, creator_share)
+    # Must before tx_hash is updated in TgUserDeposit
+    record_user_payment(agent_id, user_wallet_address, pool_share, creator_share)
 
-    # Record the transfer tx
+     # Record the transfer tx
     with Session(engine) as session:
 
         statement = select(TgUserDeposit).where(
@@ -117,6 +102,25 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
         user_deposit.tx_hash = tx
         session.add(user_deposit)
         session.commit()
+
+    with Session(engine) as session:
+
+        statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+        user_agent = session.exec(statement).first()
+
+        if pool_share != 0:
+            # Add agent pool
+            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
+
+            session.add(user_agent.agent_data)
+            session.commit()
+            session.refresh(user_agent)
+
+    # Reset user payment invocation count
+    UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
+
+    # Activate user referral
+    UserReferrals.activate(tg_user_id)
 
     send_user_notification(agent_id, tg_user_id, "The payment is received. Have fun!")
 

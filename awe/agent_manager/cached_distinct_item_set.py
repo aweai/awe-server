@@ -36,14 +36,18 @@ class CachedDistinctItemSet:
 
         statement = select(self.model_attr).distinct().where(
                 self.model.user_agent_id == user_agent_id,
-                self.model.created_at >= day
+                self.model.created_at >= day,
+                self.model.tx_hash.is_not(None),
+                self.model.tx_hash != ""
             ).order_by(self.model.id.asc())
 
         self.iterate_query(statement, redis_key)
 
     def load_items_from_db_total(self, user_agent_id: int, redis_key: str) -> list[str]:
         statement = select(self.model_attr).distinct().where(
-                    self.model.user_agent_id == user_agent_id
+                    self.model.user_agent_id == user_agent_id,
+                    self.model.tx_hash.is_not(None),
+                    self.model.tx_hash != ""
                 ).order_by(self.model.id.asc())
 
         self.iterate_query(statement, redis_key)

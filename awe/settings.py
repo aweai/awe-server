@@ -1,3 +1,4 @@
+import logging.handlers
 from pydantic_settings import BaseSettings
 from pydantic import model_validator, Field
 import logging
@@ -39,6 +40,7 @@ class AweSettings(BaseSettings):
     api_rate_limit: str = "20/minute"
 
     log_level: str = 'INFO'
+    log_dir: str = ""
     admin_token: str
 
     db_connection_string: str
@@ -167,7 +169,20 @@ if settings.remove_env_file and not keep_env_file:
 
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
+handlers = [
+    logging.StreamHandler()
+]
+
+if settings.log_dir != "":
+    handlers.append(logging.handlers.TimedRotatingFileHandler(
+        settings.log_dir,
+        when='midnight',
+        backupCount=30
+    ))
+
+
 logging.basicConfig(
     format=log_format,
-    level=settings.log_level
+    level=settings.log_level,
+    handlers=handlers
 )

@@ -85,7 +85,7 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
     awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
 
     # Collect user payment
-    tx = awe_on_chain.collect_user_payment(user_wallet_address, agent_creator_wallet, amount, game_pool_division)
+    tx = awe_on_chain.collect_user_payment(user_deposit_id, user_wallet_address, agent_creator_wallet, amount, game_pool_division)
 
     # Record stats
     # Must before tx_hash is updated in TgUserDeposit

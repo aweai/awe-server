@@ -7,15 +7,15 @@ from spl.token.constants import TOKEN_2022_PROGRAM_ID
 import spl.token.instructions as spl_token
 from .utils import system_payer, awe_mint_public_key, http_client
 from awe.settings import settings
+import traceback
 
 logger = logging.getLogger("[Collect User Fund Task]")
 
 @app.task
-def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
+def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
 
     pool_amount, agent_creator_amount, developer_amount = settings.tn_share_user_payment(game_pool_division, amount)
-
-    logger.info(f"collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")
+    logger.info(f"[User Deposit {user_deposit_id}] collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")
 
     system_payer_associated_token_account = spl_token.get_associated_token_address(
         system_payer.pubkey(),
@@ -98,8 +98,20 @@ def collect_user_fund(user_wallet: str, agent_creator_wallet: str, amount: int, 
         recent_blockhash
     )
 
-    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
-    return str(send_tx_resp.value)
+    logger.info(f"[User Deposit {user_deposit_id}] Sending tx: {tx}")
+
+    try:
+        send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+    except Exception as e:
+        logger.error(f"[User Deposit {user_deposit_id}] Failed sending the transaction")
+        logger.error(e)
+        logger.error(traceback.format_exc())
+        raise(e)
+
+    tx_hash = str(send_tx_resp.value)
+    logger.info(f"[User Deposit {user_deposit_id}] Tx sent! {tx_hash}")
+
+    return tx_hash
 
 
 @app.task

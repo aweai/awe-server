@@ -4,10 +4,14 @@ from awe.models.user_referrals import UserAlreadyReferred, CodeNotFound, UserRef
 import asyncio
 import logging
 import traceback
+from .bot_maintenance import check_maintenance
 
 logger = logging.getLogger("[Power Command]")
 
 async def power_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not await check_maintenance(update, context):
+        return
 
     if len(context.args) == 0:
         await list_power(update, context)

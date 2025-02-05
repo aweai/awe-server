@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 from awe.blockchain import awe_on_chain
 import asyncio
 import logging
+from .bot_maintenance import check_maintenance
 
 class PaymentLimitHandler(LimitHandler):
 
@@ -15,6 +16,9 @@ class PaymentLimitHandler(LimitHandler):
         self.logger = logging.getLogger("[PaymentLimitHandler]")
 
     async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if not await check_maintenance(update, context):
+            return
 
         user_id = self.get_tg_user_id_from_update(update)
         if user_id is None:

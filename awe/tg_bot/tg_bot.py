@@ -7,7 +7,6 @@ from PIL import Image
 import io
 from pathlib import Path
 import asyncio
-from collections import deque
 from ..models.tg_bot import TGBot as TGBotConfig
 from .payment_limit_handler import PaymentLimitHandler
 from .staking_handler import StakingHandler
@@ -19,11 +18,11 @@ from pathlib import Path
 from datetime import datetime
 from awe.db import engine
 from sqlmodel import Session, select
-from typing import Optional, List
+from typing import Optional
 from threading import Thread
 from awe.cache import cache
 import json
-from awe.settings import settings
+from .bot_maintenance import check_maintenance
 
 
 # Skip regular network logs
@@ -100,6 +99,9 @@ class TGBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        if not await check_maintenance(update, context):
+            return
+
         if update.effective_user is None or update.effective_chat is None:
             return
 
@@ -115,6 +117,9 @@ class TGBot:
 
 
     async def chances_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if not await check_maintenance(update, context):
+            return
 
         if update.effective_chat is None:
             return
@@ -224,6 +229,10 @@ class TGBot:
 
 
     async def respond_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if not await check_maintenance(update, context):
+            return
+
         if update.message.chat.type == constants.ChatType.PRIVATE:
             await self.respond_dm(update, context)
         elif update.message.chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:

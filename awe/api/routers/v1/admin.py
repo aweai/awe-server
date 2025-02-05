@@ -13,7 +13,7 @@ import logging
 import traceback
 from awe.db import engine
 from sqlmodel import Session, select
-
+from awe.maintenance import start_maintenance, stop_maintenance, is_in_maintenance_sync
 
 logger = logging.getLogger("[Admin API]")
 
@@ -103,6 +103,18 @@ def get_agent_staker_emissions(agent_id: int, _: Annotated[str, Depends(get_admi
         staker_emissions = session.exec(statement).all()
 
         return staker_emissions
+
+
+@router.post("/system/maintenance")
+def start_maintenance_mode(_: Annotated[str, Depends(get_admin)]) -> bool:
+    start_maintenance()
+    return is_in_maintenance_sync()
+
+
+@router.delete("/system/maintenance")
+def stop_maintenance_mode(_: Annotated[str, Depends(get_admin)]) -> bool:
+    stop_maintenance()
+    return is_in_maintenance_sync()
 
 
 def get_last_emission_cycle_end_before(before_timestamp: int) -> int:

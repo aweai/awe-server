@@ -1,10 +1,14 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from .limit_handler import LimitHandler
+from .bot_maintenance import check_maintenance
 
 class ResetHandler(LimitHandler):
 
     async def reset_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if not await check_maintenance(update, context):
+            return
 
         tg_user_id = self.get_tg_user_id_from_update(update)
 

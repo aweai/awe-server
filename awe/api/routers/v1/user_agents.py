@@ -16,7 +16,7 @@ from awe.models.utils import unix_timestamp_in_seconds
 from awe.settings import settings
 import logging
 import re
-
+from awe.maintenance import is_in_maintenance_sync
 
 logger = logging.getLogger("[User Agents API]")
 
@@ -229,6 +229,10 @@ def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_curre
 
 @router.delete("/{agent_id}")
 def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+
+    if is_in_maintenance_sync():
+        raise HTTPException(500, "System in maintenance. Please try again later.")
+
     with Session(engine) as session:
         statement = select(UserAgent).where(
             UserAgent.id == agent_id,
@@ -309,12 +313,15 @@ def return_agent_staking(creator_address: str, amount: int):
 
 @router.post("/{agent_id}/game-pool")
 def charge_game_pool(agent_id: int, amount:int, tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+    if is_in_maintenance_sync():
+        raise HTTPException(500, "System in maintenance. Please try again later")
+
     background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
 
 
 def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
 
-    awe_on_chain.wait_for_tx_confirmation(approve_tx, 20)
+    awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
 
     with Session(engine) as session:
         statement = select(UserAgent).where(

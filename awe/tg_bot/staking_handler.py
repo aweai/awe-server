@@ -9,6 +9,7 @@ from awe.settings import settings
 import prettytable
 from awe.agent_manager.agent_fund import release_user_staking, ReleaseStakingNotAllowedException
 import time
+from .bot_maintenance import check_maintenance
 
 class StakingHandler(PaymentLimitHandler):
 
@@ -17,6 +18,9 @@ class StakingHandler(PaymentLimitHandler):
         self.logger = logging.getLogger("[StakingHandler]")
 
     async def staking_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        if not await check_maintenance(update, context):
+            return
 
         if len(context.args) == 0:
             await self.list_staking(update, context)

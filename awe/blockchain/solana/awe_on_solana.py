@@ -200,3 +200,8 @@ class AweOnSolana(AweOnChain):
                 raise Exception("Transaction timeout!")
 
             time.sleep(1)
+
+
+    def get_awe_circulating_supply(self) -> float:
+        cir_supply_resp = self.http_client.get_token_supply(self.awe_mint_public_key)
+        return cir_supply_resp.value.ui_amount

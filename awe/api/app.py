@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers.v1 import user_agents, admin, agent_stats, tg_phantom_wallets, user_wallets, agents
+from .routers.v1 import user_agents, admin, agent_stats, tg_phantom_wallets, user_wallets, agents, awe
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -31,6 +31,7 @@ app.include_router(agent_stats.router)
 app.include_router(tg_phantom_wallets.router)
 app.include_router(user_wallets.router)
 app.include_router(agents.router)
+app.include_router(awe.router)
 
 
 # Agent PFPs

@@ -74,6 +74,11 @@ class AweOnChain(ABC):
         # Or timeout
         pass
 
+    @abstractmethod
+    def get_awe_circulating_supply(self) -> float:
+        # Get circulating supply of $AWE
+        pass
+
     def token_ui_amount(self, amount: int) -> str:
         # Get the UI display for the given token amount
         int_part = int(int(amount) / int(1e9))

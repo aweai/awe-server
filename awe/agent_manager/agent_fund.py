@@ -89,7 +89,7 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect User Payment] [User Deposit {user_deposit_id}] Error waiting for approve tx confirmation")
-        send_user_notification(agent_id, tg_user_id, f"Payment error: we cannot confirm the approve tx. You can safely try the payment again now.")
+        send_user_notification(agent_id, tg_user_id, f"Payment error: we cannot confirm the approve tx. You can safely try to pay again now.")
         return
 
     logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Approve tx confirmed!")
@@ -154,6 +154,11 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
     # Record the request
     with Session(engine) as session:
 
+        # Get user wallet info from db
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        user_wallet = session.exec(statement).first()
+        wallet_address = user_wallet.address
+
         # Record the transfer tx
         user_staking = UserStaking(
             tg_user_id=tg_user_id,
@@ -167,22 +172,26 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
         session.refresh(user_staking)
         staking_id = user_staking.id
 
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] User Staking created! {approve_tx}")
 
-    # Wait for the approve tx to be confirmed before next step
-    awe_on_chain.wait_for_tx_confirmation(approve_tx, 30)
+    try:
+        # Wait for the approve tx to be confirmed before next step
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+    except Exception as e:
+        logger.error(e)
+        logger.error(f"[Collect User Staking] [User Staking {staking_id}] Error waiting for approve tx confirmation")
+        send_user_notification(agent_id, tg_user_id, f"Staking error: we cannot confirm the approve tx. You can safely try to stake again now.")
+        return
 
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Approve tx confirmed!")
+
+    # Collect user staking
+    tx = awe_on_chain.collect_user_staking(staking_id, wallet_address, amount)
+
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Transfer tx confirmed! {tx}")
+
+    # Update the staking record
     with Session(engine) as session:
-
-        # Get user wallet info from db
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
-        user_wallet = session.exec(statement).first()
-        wallet_address = user_wallet.address
-
-        # Collect user staking
-        tx = awe_on_chain.collect_user_staking(user_wallet.address, amount)
-
-        # Update the staking record
-
         statement = select(UserStaking).where(
             UserStaking.id == staking_id
         )
@@ -191,9 +200,15 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
         session.add(user_staking)
         session.commit()
 
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Transfer tx recorded!")
+
     record_user_staking(agent_id, wallet_address, amount)
 
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Staking stats updated!")
+
     send_user_notification(agent_id, tg_user_id, "The staking is in position. Have fun!")
+
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Staking done!")
 
 
 def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:

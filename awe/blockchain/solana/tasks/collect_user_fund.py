@@ -115,8 +115,8 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
 
 
 @app.task
-def collect_user_staking(user_wallet: str, amount: int) -> str:
-    logger.info(f"collecting user staking: {user_wallet}: {amount}")
+def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) -> str:
+    logger.info(f"[Collect User Staking] [{user_staking_id}] Collecting user staking: {user_wallet}: {amount}")
 
     system_payer_associated_token_account = spl_token.get_associated_token_address(
         system_payer.pubkey(),
@@ -150,7 +150,12 @@ def collect_user_staking(user_wallet: str, amount: int) -> str:
         recent_blockhash
     )
 
+    logger.info(f"[Collect User Staking] [{user_staking_id}] Ready to send tx {tx.signatures[0]}")
+
     send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+
+    logger.info(f"[Collect User Staking] [{user_staking_id}] Tx confirmed!")
+
     return str(send_tx_resp.value)
 
 @app.task

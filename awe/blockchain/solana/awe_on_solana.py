@@ -167,12 +167,12 @@ class AweOnSolana(AweOnChain):
         return task.get()
 
 
-    def collect_user_staking(self, user_wallet: str, amount: int) -> str:
+    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> str:
         # Transfer tokens from the user wallet to the system wallet
         # Return the transaction hash
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_staking',
-            args=(user_wallet, amount)
+            args=(user_staking_id, user_wallet, amount)
         )
         self.logger.info("Sent collect user staking task to the queue")
         return task.get()

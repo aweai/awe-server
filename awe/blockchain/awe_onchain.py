@@ -63,11 +63,8 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def collect_user_staking(self, user_wallet: str, amount: int) -> str:
-        # Transfer tokens from the user wallet to the system wallet
-        # 69% to the pool (system wallet)
-        # 30% to the agent creator
-        # 1% to the developer
+    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> str:
+        # Transfer tokens from the user wallet to the system wallet for user staking
         # Return the transaction hash
         pass
 

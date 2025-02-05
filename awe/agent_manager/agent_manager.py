@@ -63,30 +63,30 @@ class AgentManager:
         first_time_start = True
 
         while(not self.kill_now):
-            self.logger.info("Checking for user agent updates...")
+            self.logger.debug("Checking for user agent updates...")
             updated_agents = self.load_user_agents()
 
             if first_time_start and len(updated_agents) == 0:
-                self.logger.info("First time starting...setting updated_at according to the time")
+                self.logger.debug("First time starting...setting updated_at according to the time")
                 self.updated_at = int(time.time()) - 30
             elif len(updated_agents) != 0:
-                self.logger.info("Setting updated_at according to the last updated agent")
+                self.logger.debug("Setting updated_at according to the last updated agent")
                 self.updated_at = updated_agents[len(updated_agents) - 1].updated_at
 
             for updated_agent in updated_agents:
                 if updated_agent.enabled:
                     if first_time_start:
-                        self.logger.info(f"First time starting agent {updated_agent.id}")
+                        self.logger.debug(f"First time starting agent {updated_agent.id}")
                         self.start_agent_process(updated_agent)
                     else:
-                        self.logger.info(f"Restarting updated agent {updated_agent.id}")
+                        self.logger.debug(f"Restarting updated agent {updated_agent.id}")
                         self.restart_agent_process(updated_agent)
                 else:
-                    self.logger.info(f"Stopping disabled updated agent {updated_agent.id}")
+                    self.logger.debug(f"Stopping disabled updated agent {updated_agent.id}")
                     self.stop_agent_process(updated_agent.id)
 
             first_time_start = False
-            self.logger.info(f"Updated {len(updated_agents)} user agents")
+            self.logger.debug(f"Updated {len(updated_agents)} user agents")
 
             time.sleep(10)
 

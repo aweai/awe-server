@@ -1,5 +1,7 @@
 from awe.settings import settings
 from celery import Celery
+from celery.signals import setup_logging
+import logging
 
 app = Celery(
     'awe_tasks',
@@ -14,3 +16,14 @@ app = Celery(
         'awe.blockchain.solana.tasks.transfer_to_user.transfer_to_user': {"queue": "tx_token_out"},
         'awe.blockchain.solana.tasks.transfer_to_user.batch_transfer_to_users': {"queue": "tx_token_out"},
     })
+
+
+@setup_logging.connect
+def setup_logging(*args, **kwargs):
+    # Disable Celery from hijacking our loggers...
+
+    # Remove httpx logging
+    logger = logging.getLogger("httpx")
+
+    if settings.log_level != "DEBUG":
+        logger.setLevel("WARN")

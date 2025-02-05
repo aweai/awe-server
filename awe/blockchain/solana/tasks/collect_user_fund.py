@@ -98,7 +98,7 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
         recent_blockhash
     )
 
-    logger.info(f"[User Deposit {user_deposit_id}] Sending tx: {tx}")
+    logger.info(f"[User Deposit {user_deposit_id}] Sending tx: {tx.signatures[0]}")
 
     try:
         send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
@@ -109,7 +109,7 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
         raise(e)
 
     tx_hash = str(send_tx_resp.value)
-    logger.info(f"[User Deposit {user_deposit_id}] Tx sent! {tx_hash}")
+    logger.info(f"[User Deposit {user_deposit_id}] Tx confirmed! {tx_hash}")
 
     return tx_hash
 

@@ -7,7 +7,7 @@ from awe.models.tg_user_deposit import TgUserDeposit, TgUserDepositStatus
 from awe.models.user_staking import UserStaking, UserStakingStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
-from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking, finalize_transfer_to_user
+from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking, finalize_transfer_to_user, finalize_release_staking
 from awe.api.routers.v1.user_agents import finalize_game_pool_charge
 from awe.blockchain import awe_on_chain
 import traceback
@@ -41,7 +41,7 @@ class PaymentProcessor:
             processed = processed + self.process_user_staking()
             processed = processed + self.process_game_pool_charge()
             processed = processed + self.process_user_withdraw()
-            processed = processed + self.process_return_staking()
+            processed = processed + self.process_release_staking()
 
             if processed == 0:
                 time.sleep(5)
@@ -129,8 +129,24 @@ class PaymentProcessor:
             return len(tg_user_withdraws)
 
 
-    def process_return_staking(self) -> int:
-        return 0
+    def process_release_staking(self) -> int:
+        with Session(engine) as session:
+            statement = select(UserStaking).where(UserStaking.release_status == TgUserWithdrawStatus.TX_SENT).order_by(TgUserWithdraw.id.asc()).limit(batch_size)
+            user_stakings = session.exec(statement).all()
+            for user_staking in user_stakings:
+                try:
+                    self.logger.info(f"[Release User Staking {user_staking.id}] Check tx status...")
+                    tx_status = self.get_tx_status(user_staking.release_tx_hash, user_staking.tx_last_valid_block_height)
+                    self.logger.info(f"[Release User Staking {user_staking.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_release_staking(user_staking.id)
+                    elif tx_status == "failed":
+                        UserStaking.update_release_status(user_staking.id, TgUserWithdrawStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+            return len(user_stakings)
 
 
     def get_tx_status(self, tx_hash: str, last_valid_block_height: int) -> str:

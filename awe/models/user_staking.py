@@ -22,11 +22,14 @@ class UserStaking(SQLModel, table=True):
     amount: int = Field(nullable=False)
     approve_tx_hash: str = Field(nullable=True)
     tx_hash: str = Field(nullable=True)
-    release_tx_hash: str = Field(nullable=True)
     created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
-    released_at: int = Field(nullable=True)
     tx_last_valid_block_height: Annotated[int, Field(nullable=True)]
     status: Annotated[int, Field(default=UserStakingStatus.APPROVING, index=True)] = UserStakingStatus.APPROVING
+
+    release_tx_hash: str = Field(nullable=True)
+    release_status: Annotated[int, Field(index=True, nullable=True)]
+    released_at: int = Field(nullable=True)
+
 
     @classmethod
     def get_user_staking_list(cls, user_agent_id: int, tg_user_id: str) -> List[Self]:
@@ -46,6 +49,16 @@ class UserStaking(SQLModel, table=True):
             statement = select(UserStaking).where(UserStaking.id == user_staking_id)
             user_staking = session.exec(statement).first()
             user_staking.status = status
+            session.add(user_staking)
+            session.commit()
+
+
+    @classmethod
+    def update_release_status(cls, user_staking_id: int, status: UserStakingStatus):
+        with Session(engine) as session:
+            statement = select(UserStaking).where(UserStaking.id == user_staking_id)
+            user_staking = session.exec(statement).first()
+            user_staking.release_status = status
             session.add(user_staking)
             session.commit()
 

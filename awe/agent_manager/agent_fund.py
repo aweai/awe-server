@@ -8,7 +8,7 @@ from awe.models.tg_user_withdraw import TgUserWithdrawStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 from awe.db import engine
 import logging
 import traceback
@@ -321,7 +321,7 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
     logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Withdraw created!")
 
     # Send the transaction
-    tx, last_valid_block_height = awe_on_chain.transfer_to_user(user_withdraw_id, user_address, amount)
+    tx, last_valid_block_height = awe_on_chain.transfer_to_user(f"withdraw_{user_withdraw_id}", user_address, amount)
 
     logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Tx sent! {tx}")
 
@@ -433,6 +433,7 @@ def batch_transfer_to_users(agent_id: int, user_ids: List[str], user_addresses: 
 
     return tx
 
+
 def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet_address: str) -> str:
 
     # Lock the agent to prevent race condition
@@ -441,12 +442,14 @@ def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet
 
     with staking_locks[staking_id]:
 
+        logger.info(f"[Release User Staking] [{staking_id}] Releasing user staking")
+
         with Session(engine) as session:
             statement = select(UserStaking).where(
                 UserStaking.id == staking_id,
                 UserStaking.tg_user_id == tg_user_id,
                 UserStaking.user_agent_id == agent_id,
-                UserStaking.released_at.is_(None)
+                UserStaking.release_status.is_(None)
             )
 
             user_staking = session.exec(statement).first()
@@ -454,8 +457,8 @@ def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet
             if user_staking is None:
                 raise ReleaseStakingNotAllowedException("Staking not found")
 
-            if user_staking.tx_hash is None or user_staking.tx_hash == "":
-                raise ReleaseStakingNotAllowedException("Staking not confirmed")
+            if user_staking.status != UserStakingStatus.SUCCESS:
+                raise ReleaseStakingNotAllowedException("Staking not success")
 
             now = unix_timestamp_in_seconds()
             if now - user_staking.created_at < settings.tn_user_staking_locking_days * 86400:
@@ -465,31 +468,49 @@ def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet
 
             logger.info(f"[{staking_id}] Releasing user staking: {amount}")
 
+            user_staking_id = user_staking.id
+
             # Update the db first
-            user_staking.released_at = now
+            user_staking.release_status = UserStakingStatus.APPROVING
             session.add(user_staking)
             session.commit()
 
     # Send the transaction
-    logger.info(f"[{staking_id}] Sending staking tokens to user: {wallet_address}:{amount}")
-    tx = awe_on_chain.transfer_to_user(wallet_address, amount)
+    logger.info(f"[Release User Staking] [{staking_id}] Sending tx: {wallet_address}:{amount}")
+    tx, last_valid_block_height = awe_on_chain.transfer_to_user(f"release_staking_{user_staking_id}", wallet_address, amount)
 
-    logger.info(f"[{staking_id}] Release staking tx sent: {tx}")
+    logger.info(f"[Release User Staking] [{staking_id}] Release staking tx sent: {tx}")
 
     # Record the tx
     with Session(engine) as session:
-        statement = select(UserStaking).where(
-            UserStaking.id == staking_id,
-            UserStaking.tg_user_id == tg_user_id,
-            UserStaking.user_agent_id == agent_id
-        )
-
+        statement = select(UserStaking).where(UserStaking.id == staking_id)
         user_staking = session.exec(statement).first()
 
         user_staking.release_tx_hash = tx
+        user_staking.tx_last_valid_block_height = last_valid_block_height # reuse the same field
+        user_staking.release_status = UserStakingStatus.TX_SENT
         session.add(user_staking)
         session.commit()
 
-    record_user_staking_release(agent_id, wallet_address, amount)
+    logger.info(f"[Release User Staking] [{staking_id}] Release staking tx recorded!")
 
     return tx
+
+
+def finalize_release_staking(staking_id: int):
+
+    logger.info(f"[Release User Staking] [{staking_id}] Finalizing")
+
+    with Session(engine) as session:
+        statement = select(UserStaking).where(UserStaking.id == staking_id)
+        user_staking = session.exec(statement).first()
+
+        record_user_staking_release(user_staking.user_agent_id, user_staking.address, user_staking.amount, session)
+
+        user_staking.release_status = UserStakingStatus.SUCCESS
+        user_staking.released_at = unix_timestamp_in_seconds()
+        session.add(user_staking)
+
+        session.commit()
+
+    logger.info(f"[Release User Staking] [{staking_id}] Finalized!")

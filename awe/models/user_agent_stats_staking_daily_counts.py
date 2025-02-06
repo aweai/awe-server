@@ -34,24 +34,22 @@ class UserAgentStatsStakingDailyCounts(SQLModel, table=True):
 
 
     @classmethod
-    def add_releasing(cls, user_agent_id: int, amount: int):
+    def add_releasing(cls, user_agent_id: int, amount: int, session: Session):
         day = get_day_as_timestamp()
 
-        with Session(engine) as session:
-            statement = select(UserAgentStatsStakingDailyCounts).where(
-                UserAgentStatsStakingDailyCounts.day == day,
-                UserAgentStatsStakingDailyCounts.user_agent_id == user_agent_id
+        statement = select(UserAgentStatsStakingDailyCounts).where(
+            UserAgentStatsStakingDailyCounts.day == day,
+            UserAgentStatsStakingDailyCounts.user_agent_id == user_agent_id
+        )
+        stats_data = session.exec(statement).first()
+
+        if stats_data is None:
+            stats_data = UserAgentStatsStakingDailyCounts(
+                day=day,
+                user_agent_id=user_agent_id,
+                out_amount=amount
             )
-            stats_data = session.exec(statement).first()
+        else:
+            stats_data.out_amount = UserAgentStatsStakingDailyCounts.out_amount + amount
 
-            if stats_data is None:
-                stats_data = UserAgentStatsStakingDailyCounts(
-                    day=day,
-                    user_agent_id=user_agent_id,
-                    out_amount=amount
-                )
-            else:
-                stats_data.out_amount = UserAgentStatsStakingDailyCounts.out_amount + amount
-
-            session.add(stats_data)
-            session.commit()
+        session.add(stats_data)

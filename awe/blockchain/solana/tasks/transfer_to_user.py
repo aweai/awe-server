@@ -17,11 +17,11 @@ logger = logging.getLogger("[Transfer to User Task]")
 
 
 @app.task
-def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tuple[str, int]:
+def transfer_to_user(request_id: str, user_wallet: str, amount: int) -> Tuple[str, int]:
     # Transfer AWE from the system account to the given wallet address
     # Return the tx address and last valid block height
 
-    logger.info(f"[User Withdraw {user_withdraw_id}] Start transfering to user")
+    logger.info(f"[Request {request_id}] Start transfering to user")
 
     dest_owner_pubkey = Pubkey.from_string(user_wallet)
 
@@ -41,7 +41,7 @@ def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tu
         # We have to create it for the user
         # Some SOL will be spent
 
-        logger.info(f"[User Withdraw {user_withdraw_id}] Create token account for the user")
+        logger.info(f"[Request {request_id}] Create token account for the user")
 
         ix = spl_token.create_associated_token_account(
             payer=system_payer.pubkey(),
@@ -57,7 +57,7 @@ def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tu
         tx_opts = TxOpts(skip_confirmation=False)
         http_client.send_transaction(txn, opts=tx_opts)
 
-        logger.info(f"[User Withdraw {user_withdraw_id}] User token account created!")
+        logger.info(f"[Request {request_id}] User token account created!")
 
     source_associated_token_account_pubkey = spl_token.get_associated_token_address(
         system_payer.pubkey(),
@@ -65,7 +65,7 @@ def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tu
         TOKEN_2022_PROGRAM_ID
     )
 
-    logger.info(f"[User Withdraw {user_withdraw_id}] Ready to send tx")
+    logger.info(f"[Request {request_id}] Ready to send tx")
 
     latest_blockhash = http_client.get_latest_blockhash().value
 
@@ -81,7 +81,7 @@ def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tu
         recent_blockhash=recent_blockhash
     )
 
-    logger.info(f"[User Withdraw {user_withdraw_id}] Tx sent {send_tx_resp.value}")
+    logger.info(f"[Request {request_id}] Tx sent {send_tx_resp.value}")
 
     return str(send_tx_resp.value), last_valid_block_height
 

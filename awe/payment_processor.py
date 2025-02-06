@@ -6,7 +6,8 @@ from awe.db import engine
 from awe.models.tg_user_deposit import TgUserDeposit, TgUserDepositStatus
 from awe.models.user_staking import UserStaking, UserStakingStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
-from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking
+from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
+from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking, finalize_transfer_to_user
 from awe.api.routers.v1.user_agents import finalize_game_pool_charge
 from awe.blockchain import awe_on_chain
 import traceback
@@ -109,7 +110,23 @@ class PaymentProcessor:
 
 
     def process_user_withdraw(self) -> int:
-        return 0
+        with Session(engine) as session:
+            statement = select(TgUserWithdraw).where(TgUserWithdraw.status == TgUserWithdrawStatus.TX_SENT).order_by(TgUserWithdraw.id.asc()).limit(batch_size)
+            tg_user_withdraws = session.exec(statement).all()
+            for tg_user_withdraw in tg_user_withdraws:
+                try:
+                    self.logger.info(f"[User Withdraw {tg_user_withdraw.id}] Check tx status...")
+                    tx_status = self.get_tx_status(tg_user_withdraw.tx_hash, tg_user_withdraw.tx_last_valid_block_height)
+                    self.logger.info(f"[User Withdraw {tg_user_withdraw.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_transfer_to_user(tg_user_withdraw.id)
+                    elif tx_status == "failed":
+                        TgUserWithdraw.update_status(tg_user_withdraw.id, TgUserWithdrawStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+            return len(tg_user_withdraws)
 
 
     def process_return_staking(self) -> int:

@@ -10,16 +10,18 @@ import logging
 import spl.token.instructions as spl_token
 from awe.celery import app
 from .utils import token_client, awe_mint_public_key, system_payer, http_client
-from typing import List
+from typing import List, Tuple
 
 
 logger = logging.getLogger("[Transfer to User Task]")
 
 
 @app.task
-def transfer_to_user(user_wallet: str, amount: int):
+def transfer_to_user(user_withdraw_id: int, user_wallet: str, amount: int) -> Tuple[str, int]:
     # Transfer AWE from the system account to the given wallet address
-    # Return the tx address
+    # Return the tx address and last valid block height
+
+    logger.info(f"[User Withdraw {user_withdraw_id}] Start transfering to user")
 
     dest_owner_pubkey = Pubkey.from_string(user_wallet)
 
@@ -39,6 +41,8 @@ def transfer_to_user(user_wallet: str, amount: int):
         # We have to create it for the user
         # Some SOL will be spent
 
+        logger.info(f"[User Withdraw {user_withdraw_id}] Create token account for the user")
+
         ix = spl_token.create_associated_token_account(
             payer=system_payer.pubkey(),
             owner=dest_owner_pubkey,
@@ -53,21 +57,33 @@ def transfer_to_user(user_wallet: str, amount: int):
         tx_opts = TxOpts(skip_confirmation=False)
         http_client.send_transaction(txn, opts=tx_opts)
 
+        logger.info(f"[User Withdraw {user_withdraw_id}] User token account created!")
+
     source_associated_token_account_pubkey = spl_token.get_associated_token_address(
         system_payer.pubkey(),
         awe_mint_public_key,
         TOKEN_2022_PROGRAM_ID
     )
 
+    logger.info(f"[User Withdraw {user_withdraw_id}] Ready to send tx")
+
+    latest_blockhash = http_client.get_latest_blockhash().value
+
+    recent_blockhash = latest_blockhash.blockhash
+    last_valid_block_height = latest_blockhash.last_valid_block_height
+
     send_tx_resp = token_client.transfer_checked(
         source=source_associated_token_account_pubkey,
         dest=dest_associated_token_account_pubkey,
         owner=system_payer,
         amount=int(amount * 1e9),
-        decimals=9
+        decimals=9,
+        recent_blockhash=recent_blockhash
     )
 
-    return str(send_tx_resp.value)
+    logger.info(f"[User Withdraw {user_withdraw_id}] Tx sent {send_tx_resp.value}")
+
+    return str(send_tx_resp.value), last_valid_block_height
 
 
 @app.task

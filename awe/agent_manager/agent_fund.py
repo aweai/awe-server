@@ -4,6 +4,7 @@ from awe.models import TgUserDeposit, \
                         UserReferrals
 from awe.models.tg_user_deposit import TgUserDepositStatus
 from awe.models.user_staking import UserStakingStatus
+from awe.models.tg_user_withdraw import TgUserWithdrawStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
@@ -274,7 +275,7 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
     except:
         raise TransferToUserNotAllowedException("Invalid amount provided!")
 
-    logger.info(f"Transferring {amount} tokens")
+    logger.info(f"[Transfer To User] Transfer from agent {agent_id} to user {tg_user_id}({user_address}): {amount}")
 
     # Lock the agent to prevent race condition
     if agent_id not in agent_locks:
@@ -315,20 +316,49 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
             session.add(user_withdraw)
             session.commit()
             session.refresh(user_withdraw)
+            user_withdraw_id = user_withdraw.id
+
+    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Withdraw created!")
 
     # Send the transaction
-    tx = awe_on_chain.transfer_to_user(user_address, amount)
+    tx, last_valid_block_height = awe_on_chain.transfer_to_user(user_withdraw_id, user_address, amount)
+
+    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Tx sent! {tx}")
 
     # Record the tx
     with Session(engine) as session:
+        statement = select(TgUserWithdraw).where(TgUserWithdraw.id == user_withdraw_id)
+        user_withdraw = session.exec(statement).first()
+
         user_withdraw.tx_hash = tx
+        user_withdraw.tx_last_valid_block_height = last_valid_block_height
+        user_withdraw.status = TgUserWithdrawStatus.TX_SENT
+
         session.add(user_withdraw)
         session.commit()
 
-    # Record stats
-    record_user_withdraw(agent_id, user_address, amount)
+    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Tx recorded!")
 
     return tx
+
+
+def finalize_transfer_to_user(user_withdraw_id: int):
+
+    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Finalizing user withdraw")
+
+    with Session(engine) as session:
+        statement = select(TgUserWithdraw).where(TgUserWithdraw.id == user_withdraw_id)
+        user_withdraw = session.exec(statement).first()
+
+        # Record stats
+        record_user_withdraw(user_withdraw.user_agent_id, user_withdraw.address, user_withdraw.amount, session)
+
+        user_withdraw.status = TgUserWithdrawStatus.SUCCESS
+        session.add(user_withdraw)
+
+        session.commit()
+
+    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] User withdraw finalized!")
 
 
 def batch_transfer_to_users(agent_id: int, user_ids: List[str], user_addresses: List[str], amounts: List[int]) -> str:

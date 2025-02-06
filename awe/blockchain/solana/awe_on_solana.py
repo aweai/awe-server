@@ -62,12 +62,12 @@ class AweOnSolana(AweOnChain):
         return None
 
 
-    def transfer_to_user(self, dest_owner_address: str, amount: int) -> str:
+    def transfer_to_user(self, user_withdraw_id: int, dest_owner_address: str, amount: int) -> Tuple[str, int]:
         # Transfer AWE from the system account to the given wallet address
         # Return the tx address
         task = app.send_task(
             name='awe.blockchain.solana.tasks.transfer_to_user.transfer_to_user',
-            args=(dest_owner_address, amount)
+            args=(user_withdraw_id, dest_owner_address, amount)
         )
         self.logger.info("Sent transfer to user task to the queue")
         return task.get()

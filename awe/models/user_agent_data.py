@@ -75,22 +75,22 @@ class UserAgentData(SQLModel, table=True):
             session.add(user_agent_data)
             session.commit()
 
+
     @classmethod
-    def add_awe_token_transfer_stats(cls, user_agent_id: int, amount: int, is_new_address: bool):
-        with Session(engine) as session:
-            statement = select(UserAgentData).where(
-                UserAgentData.user_agent_id == user_agent_id
-            )
-            user_agent_data = session.exec(statement).first()
+    def add_awe_token_transfer_stats(cls, user_agent_id: int, amount: int, is_new_address: bool, session: Session):
+        statement = select(UserAgentData).where(
+            UserAgentData.user_agent_id == user_agent_id
+        )
+        user_agent_data = session.exec(statement).first()
 
-            user_agent_data.awe_token_total_transactions = UserAgentData.awe_token_total_transactions + 1
-            user_agent_data.awe_token_total_transferred = UserAgentData.awe_token_total_transferred + amount
+        user_agent_data.awe_token_total_transactions = UserAgentData.awe_token_total_transactions + 1
+        user_agent_data.awe_token_total_transferred = UserAgentData.awe_token_total_transferred + amount
 
-            if is_new_address:
-                user_agent_data.awe_token_total_addresses = UserAgentData.awe_token_total_addresses + 1
+        if is_new_address:
+            user_agent_data.awe_token_total_addresses = UserAgentData.awe_token_total_addresses + 1
 
-            session.add(user_agent_data)
-            session.commit()
+        session.add(user_agent_data)
+
 
     @classmethod
     def add_income_shares(cls, user_agent_id: int, amount: int, session: Session):

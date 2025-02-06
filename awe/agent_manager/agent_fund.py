@@ -3,6 +3,7 @@ from awe.models import TgUserDeposit, \
                         TGBotUserWallet, UserAgent, UserAgentUserInvocations, \
                         UserReferrals
 from awe.models.tg_user_deposit import TgUserDepositStatus
+from awe.models.user_staking import UserStakingStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
@@ -200,6 +201,7 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
         user_staking = UserStaking(
             tg_user_id=tg_user_id,
             user_agent_id=agent_id,
+            address=wallet_address,
             amount=amount,
             approve_tx_hash=approve_tx
         )
@@ -217,15 +219,16 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect User Staking] [User Staking {staking_id}] Error waiting for approve tx confirmation")
+        UserStaking.update_staking_status(staking_id, UserStakingStatus.FAILED)
         send_user_notification(agent_id, tg_user_id, f"Staking error: we cannot confirm the approve tx. You can safely try to stake again now.")
         return
 
     logger.info(f"[Collect User Staking] [User Staking {staking_id}] Approve tx confirmed!")
 
     # Collect user staking
-    tx = awe_on_chain.collect_user_staking(staking_id, wallet_address, amount)
+    tx, last_valid_block_height = awe_on_chain.collect_user_staking(staking_id, wallet_address, amount)
 
-    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Transfer tx confirmed! {tx}")
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Transfer tx sent! {tx}")
 
     # Update the staking record
     with Session(engine) as session:
@@ -234,18 +237,34 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
         )
         user_staking = session.exec(statement).first()
         user_staking.tx_hash = tx
+        user_staking.tx_last_valid_block_height = last_valid_block_height
+        user_staking.status = UserStakingStatus.TX_SENT
         session.add(user_staking)
         session.commit()
 
     logger.info(f"[Collect User Staking] [User Staking {staking_id}] Transfer tx recorded!")
 
-    record_user_staking(agent_id, wallet_address, amount)
 
-    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Staking stats updated!")
+def finalize_user_staking(staking_id: int):
+    with Session(engine) as session:
+        statement = select(UserStaking).where(
+            UserStaking.id == staking_id
+        )
+        user_staking = session.exec(statement).first()
+
+        agent_id = user_staking.user_agent_id
+        tg_user_id = user_staking.tg_user_id
+
+        record_user_staking(user_staking.user_agent_id, user_staking.address, user_staking.amount, session)
+
+        user_staking.status = UserStakingStatus.SUCCESS
+        session.add(user_staking)
+
+        session.commit()
+
+    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Staking finalized!")
 
     send_user_notification(agent_id, tg_user_id, "The staking is in position. Have fun!")
-
-    logger.info(f"[Collect User Staking] [User Staking {staking_id}] Staking done!")
 
 
 def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:

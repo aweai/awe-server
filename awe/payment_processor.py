@@ -4,7 +4,8 @@ import time
 from sqlmodel import Session, select
 from awe.db import engine
 from awe.models.tg_user_deposit import TgUserDeposit, TgUserDepositStatus
-from awe.agent_manager.agent_fund import finalize_user_payment
+from awe.models.user_staking import UserStaking, UserStakingStatus
+from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking
 from awe.blockchain import awe_on_chain
 import traceback
 
@@ -51,7 +52,9 @@ class PaymentProcessor:
             tg_user_deposits = session.exec(statement).all()
             for tg_user_deposit in tg_user_deposits:
                 try:
+                    self.logger.info(f"[User Deposit {tg_user_deposit.id}] Check tx status...")
                     tx_status = self.get_tx_status(tg_user_deposit.tx_hash, tg_user_deposit.tx_last_valid_block_height)
+                    self.logger.info(f"[User Deposit {tg_user_deposit.id}] Tx status {tx_status}")
                     if tx_status == "success":
                         finalize_user_payment(tg_user_deposit.id)
                     elif tx_status == "failed":
@@ -64,7 +67,23 @@ class PaymentProcessor:
 
 
     def process_user_staking(self) -> int:
-        return 0
+        with Session(engine) as session:
+            statement = select(UserStaking).where(UserStaking.status == UserStakingStatus.TX_SENT).order_by(UserStaking.id.asc()).limit(batch_size)
+            user_stakings = session.exec(statement).all()
+            for user_staking in user_stakings:
+                try:
+                    self.logger.info(f"[User Staking {user_staking.id}] Check tx status...")
+                    tx_status = self.get_tx_status(user_staking.tx_hash, user_staking.tx_last_valid_block_height)
+                    self.logger.info(f"[User Staking {user_staking.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_user_staking(user_staking.id)
+                    elif tx_status == "failed":
+                        UserStaking.update_staking_status(user_staking.id, UserStakingStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+            return len(user_stakings)
 
 
     def process_game_pool_charge(self) -> int:
@@ -87,6 +106,9 @@ class PaymentProcessor:
         # Not confirmed
         # Check if the tx is expired
         current_block_height = awe_on_chain.get_block_height()
+
+        self.logger.debug(f"Current block height: {current_block_height}/{last_valid_block_height}")
+
         if current_block_height > last_valid_block_height + 30:
             return "failed"
 

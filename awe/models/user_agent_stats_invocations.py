@@ -20,7 +20,7 @@ class AITools(str, Enum):
 class UsersIdSet:
 
     def iterate_query(self, statement, redis_key):
-        page_size = 10000
+        page_size = 1000
         current_page = 0
 
         while(True):
@@ -32,9 +32,10 @@ class UsersIdSet:
                 logger.debug(f"Loaded {len(user_ids)} user_ids")
 
                 if len(user_ids) > 0:
-                    logger.debug(f"Adding user_ids to redis: {user_ids}")
+                    ids = [user_id[0] for user_id in user_ids]
+                    logger.debug(f"Adding user_ids to redis: {ids}")
                     try:
-                        cache.sadd(redis_key, *user_ids)
+                        cache.sadd(redis_key, *ids)
                     except Exception as e:
                         logger.error(e)
                         raise Exception("Error writing to Redis cache")
@@ -46,7 +47,7 @@ class UsersIdSet:
 
     def load_user_ids_from_db_for_today(self, day: int, user_agent_id: int, redis_key: str):
 
-        statement = select(UserAgentStatsInvocations.tg_user_id).distinct().where(
+        statement = select(UserAgentStatsInvocations.tg_user_id, UserAgentStatsInvocations.id).distinct().where(
                 UserAgentStatsInvocations.user_agent_id == user_agent_id,
                 UserAgentStatsInvocations.created_at >= day
             ).order_by(UserAgentStatsInvocations.id.asc())
@@ -54,7 +55,7 @@ class UsersIdSet:
         self.iterate_query(statement, redis_key)
 
     def load_user_ids_from_db_total(self, user_agent_id: int, redis_key: str) -> list[str]:
-        statement = select(UserAgentStatsInvocations.tg_user_id).distinct().where(
+        statement = select(UserAgentStatsInvocations.tg_user_id, UserAgentStatsInvocations.id).distinct().where(
                     UserAgentStatsInvocations.user_agent_id == user_agent_id
                 ).order_by(UserAgentStatsInvocations.id.asc())
 

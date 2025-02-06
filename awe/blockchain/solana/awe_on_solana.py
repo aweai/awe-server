@@ -149,13 +149,14 @@ class AweOnSolana(AweOnChain):
 
     def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the pool, agent creators and developers
-        # Return the transaction hash
+        # Return the transaction hash and the last valid block height
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_fund',
             args=(user_deposit_id, user_wallet, agent_creator_wallet, amount, game_pool_division)
         )
         self.logger.info("Sent collect user payment task to the queue")
         return task.get()
+
 
     def collect_game_pool_charge(self,  charge_id: int, agent_creator_wallet: str, amount: int) -> str:
         task = app.send_task(
@@ -167,9 +168,9 @@ class AweOnSolana(AweOnChain):
         return task.get()
 
 
-    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> str:
+    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the system wallet
-        # Return the transaction hash
+        # Return the transaction hash and the last valid block height
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_user_staking',
             args=(user_staking_id, user_wallet, amount)

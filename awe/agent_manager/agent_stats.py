@@ -31,9 +31,11 @@ def record_user_withdraw(user_agent_id: int, address: str, amount: int):
     # Add token transfer total count
     UserAgentData.add_awe_token_transfer_stats(user_agent_id, amount, is_new_address_total)
 
-def record_user_staking(user_agent_id: int, address: str, amount: int):
-    UserAgentStatsStakingDailyCounts.add_staking(user_agent_id, amount)
-    UserAgentData.add_staking(user_agent_id, amount)
+
+def record_user_staking(user_agent_id: int, address: str, amount: int, session: Session):
+    UserAgentStatsStakingDailyCounts.add_staking(user_agent_id, amount, session)
+    UserAgentData.add_staking(user_agent_id, amount, session)
+
 
 def record_user_staking_release(user_agent_id: int, address: str, amount: int):
     UserAgentStatsStakingDailyCounts.add_releasing(user_agent_id, amount)

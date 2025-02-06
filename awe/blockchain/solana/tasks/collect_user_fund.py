@@ -119,7 +119,7 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
 
 
 @app.task
-def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) -> str:
+def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) -> Tuple[str, int]:
     logger.info(f"[Collect User Staking] [{user_staking_id}] Collecting user staking: {user_wallet}: {amount}")
 
     system_payer_associated_token_account = spl_token.get_associated_token_address(
@@ -145,7 +145,10 @@ def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) ->
         program_id=TOKEN_2022_PROGRAM_ID
     ))
 
-    recent_blockhash = http_client.get_latest_blockhash().value.blockhash
+    latest_blockhash = http_client.get_latest_blockhash().value
+
+    recent_blockhash = latest_blockhash.blockhash
+    last_valid_block_height = latest_blockhash.last_valid_block_height
 
     tx = Transaction.new_signed_with_payer(
         [ix],
@@ -156,11 +159,11 @@ def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) ->
 
     logger.info(f"[Collect User Staking] [{user_staking_id}] Ready to send tx {tx.signatures[0]}")
 
-    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=True))
 
-    logger.info(f"[Collect User Staking] [{user_staking_id}] Tx confirmed!")
+    logger.info(f"[Collect User Staking] [{user_staking_id}] Tx sent!")
 
-    return str(send_tx_resp.value)
+    return str(send_tx_resp.value), last_valid_block_height
 
 
 @app.task

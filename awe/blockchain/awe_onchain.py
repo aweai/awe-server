@@ -53,7 +53,7 @@ class AweOnChain(ABC):
     @abstractmethod
     def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the system wallet
-        # Return the transaction hash
+        # Return the transaction hash and the last valid block height
         pass
 
     @abstractmethod
@@ -63,9 +63,9 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> str:
+    def collect_user_staking(self, user_staking_id:int, user_wallet: str, amount: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the system wallet for user staking
-        # Return the transaction hash
+        # Return the transaction hash and the last valid block height
         pass
 
     @abstractmethod

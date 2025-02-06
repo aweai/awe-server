@@ -1,20 +1,32 @@
 from sqlmodel import SQLModel, Field, select, Session
 from .utils import unix_timestamp_in_seconds
-from typing import List
+from typing import List, Annotated
 from typing_extensions import Self
 from awe.db import engine
 from .utils import unix_timestamp_in_seconds
+
+class UserStakingStatus:
+    APPROVING = 1
+    APPROVED = 2
+    TX_SENT = 3
+    TX_CONFIRMED = 4
+    FAILED = 5
+    SUCCESS = 6
+
 
 class UserStaking(SQLModel, table=True):
     id: int | None = Field(primary_key=True)
     tg_user_id: str = Field(index=True, nullable=False)
     user_agent_id: int = Field(index=True, nullable=False)
+    address: Annotated[str, Field(nullable=True)]
     amount: int = Field(nullable=False)
     approve_tx_hash: str = Field(nullable=True)
     tx_hash: str = Field(nullable=True)
     release_tx_hash: str = Field(nullable=True)
     created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
     released_at: int = Field(nullable=True)
+    tx_last_valid_block_height: Annotated[int, Field(nullable=True)]
+    status: Annotated[int, Field(default=UserStakingStatus.APPROVING, index=True)] = UserStakingStatus.APPROVING
 
     @classmethod
     def get_user_staking_list(cls, user_agent_id: int, tg_user_id: str) -> List[Self]:
@@ -26,6 +38,17 @@ class UserStaking(SQLModel, table=True):
             ).order_by(UserStaking.created_at.asc())
 
             return session.exec(statement).all()
+
+
+    @classmethod
+    def update_staking_status(cls, user_staking_id: int, status: UserStakingStatus):
+        with Session(engine) as session:
+            statement = select(UserStaking).where(UserStaking.id == user_staking_id)
+            user_staking = session.exec(statement).first()
+            user_staking.status = status
+            session.add(user_staking)
+            session.commit()
+
 
     def get_multiplier(self, till_day_timestamp: int) -> float:
 

@@ -74,7 +74,7 @@ class AweAgent:
 
         if self.config.awe_token_enabled:
             tools.append(AweTransferTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
-            tools.append(BatchAweTransferTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
+            # tools.append(BatchAweTransferTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
             tools.append(AweAgentBalanceTool(awe_token_config=self.config.awe_token_config, user_agent_id=user_agent_id))
             tools.append(SolPriceTool())
 

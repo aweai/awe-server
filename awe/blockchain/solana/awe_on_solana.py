@@ -158,7 +158,7 @@ class AweOnSolana(AweOnChain):
         return task.get()
 
 
-    def collect_game_pool_charge(self,  charge_id: int, agent_creator_wallet: str, amount: int) -> str:
+    def collect_game_pool_charge(self,  charge_id: int, agent_creator_wallet: str, amount: int) -> Tuple[str, int]:
         task = app.send_task(
             name='awe.blockchain.solana.tasks.collect_user_fund.collect_game_pool_charge',
             args=(charge_id, agent_creator_wallet, amount)

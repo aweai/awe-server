@@ -167,7 +167,7 @@ def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) ->
 
 
 @app.task
-def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: int) -> str:
+def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: int) -> Tuple[str, int]:
     logger.info(f"[Game Pool Charge] [{charge_id}] Collecting game pool charge: {agent_creator_wallet}: {amount}")
 
     system_payer_associated_token_account = spl_token.get_associated_token_address(
@@ -193,7 +193,10 @@ def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: 
         program_id=TOKEN_2022_PROGRAM_ID
     ))
 
-    recent_blockhash = http_client.get_latest_blockhash().value.blockhash
+    latest_blockhash = http_client.get_latest_blockhash().value
+
+    recent_blockhash = latest_blockhash.blockhash
+    last_valid_block_height = latest_blockhash.last_valid_block_height
 
     tx = Transaction.new_signed_with_payer(
         [ix],
@@ -204,8 +207,8 @@ def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: 
 
     logger.info(f"[Game Pool Charge] [{charge_id}] Sending tx: {tx.signatures[0]}")
 
-    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=True))
 
-    logger.info(f"[Game Pool Charge] [{charge_id}] Tx confirmed!")
+    logger.info(f"[Game Pool Charge] [{charge_id}] Tx sent!")
 
-    return str(send_tx_resp.value)
+    return str(send_tx_resp.value), last_valid_block_height

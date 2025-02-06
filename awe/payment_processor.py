@@ -5,7 +5,9 @@ from sqlmodel import Session, select
 from awe.db import engine
 from awe.models.tg_user_deposit import TgUserDeposit, TgUserDepositStatus
 from awe.models.user_staking import UserStaking, UserStakingStatus
+from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking
+from awe.api.routers.v1.user_agents import finalize_game_pool_charge
 from awe.blockchain import awe_on_chain
 import traceback
 
@@ -87,7 +89,23 @@ class PaymentProcessor:
 
 
     def process_game_pool_charge(self) -> int:
-        return 0
+        with Session(engine) as session:
+            statement = select(GamePoolCharge).where(GamePoolCharge.status == GamePoolChargeStatus.TX_SENT).order_by(GamePoolCharge.id.asc()).limit(batch_size)
+            game_pool_charges = session.exec(statement).all()
+            for game_pool_charge in game_pool_charges:
+                try:
+                    self.logger.info(f"[Game Pool Charge {game_pool_charge.id}] Check tx status...")
+                    tx_status = self.get_tx_status(game_pool_charge.tx_hash, game_pool_charge.tx_last_valid_block_height)
+                    self.logger.info(f"[Game Pool Charge {game_pool_charge.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_game_pool_charge(game_pool_charge.id)
+                    elif tx_status == "failed":
+                        GamePoolCharge.update_status(game_pool_charge.id, GamePoolChargeStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+            return len(game_pool_charges)
 
 
     def process_user_withdraw(self) -> int:

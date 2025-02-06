@@ -57,7 +57,7 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def collect_game_pool_charge(self, agent_creator_wallet: str, amount: int) -> str:
+    def collect_game_pool_charge(self, charge_id: int, agent_creator_wallet: str, amount: int) -> str:
         # Transfer tokens from the agent creator wallet to the system wallet
         # Return the transaction hash
         pass

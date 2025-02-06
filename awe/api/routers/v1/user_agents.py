@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, BackgroundTasks, Query
 from awe.models.user_agent import UserAgent
 from awe.models.user_agent_data import UserAgentData
 from awe.models.tg_bot import TGBot
@@ -312,16 +312,9 @@ def return_agent_staking(creator_address: str, amount: int):
 
 
 @router.post("/{agent_id}/game-pool")
-def charge_game_pool(agent_id: int, amount:int, tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+def charge_game_pool(agent_id: int, amount: Annotated[int, Query(gt=0)], tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
     if is_in_maintenance_sync():
         raise HTTPException(500, "System in maintenance. Please try again later")
-
-    background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
-
-
-def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
-
-    awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
 
     with Session(engine) as session:
         statement = select(UserAgent).where(
@@ -329,25 +322,61 @@ def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, appr
             UserAgent.user_address == user_address,
             UserAgent.deleted_at.is_(None)
         )
-
         user_agent = session.exec(statement).first()
         if user_agent is None:
-            return None
+            raise HTTPException(400, "Agent not found")
 
-        collect_tx = awe_on_chain.collect_game_pool_charge(user_address, amount)
+    background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
 
-        # Record the transfer tx
+
+def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
+
+    # Record the charge request
+
+    with Session(engine) as session:
         game_pool_charge = GamePoolCharge(
             user_agent_id=agent_id,
             address=user_address,
             amount=amount,
-            tx_hash=collect_tx
+            approve_tx_hash=approve_tx
         )
-
         session.add(game_pool_charge)
+        session.commit()
+        session.refresh(game_pool_charge)
+
+        charge_id = game_pool_charge.id
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge request recorded! {approve_tx}")
+
+    try:
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(500, "Cannot confirm the apporve tx. You can safely try again now.")
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Approve tx confirmed!")
+
+    collect_tx = awe_on_chain.collect_game_pool_charge(charge_id, user_address, amount)
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx confirmed! {collect_tx}")
+
+    with Session(engine) as session:
+        statement = select(GamePoolCharge).where(GamePoolCharge.id == charge_id)
+        game_pool_charge = session.exec(statement).first()
+        game_pool_charge.tx_hash = collect_tx
+        session.add(game_pool_charge)
+        session.commit()
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx recorded!")
+
+    with Session(engine) as session:
+        statement = select(UserAgent).where(UserAgent.id == agent_id)
+        user_agent = session.exec(statement).first()
 
         # Update the game pool
         user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + amount
         session.add(user_agent.agent_data)
 
         session.commit()
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool updated!")

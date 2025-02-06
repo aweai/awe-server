@@ -158,9 +158,10 @@ def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) ->
 
     return str(send_tx_resp.value)
 
+
 @app.task
-def collect_game_pool_charge(agent_creator_wallet: str, amount: int) -> str:
-    logger.info(f"collecting game pool charge: {agent_creator_wallet}: {amount}")
+def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: int) -> str:
+    logger.info(f"[Game Pool Charge] [{charge_id}] Collecting game pool charge: {agent_creator_wallet}: {amount}")
 
     system_payer_associated_token_account = spl_token.get_associated_token_address(
         system_payer.pubkey(),
@@ -194,5 +195,10 @@ def collect_game_pool_charge(agent_creator_wallet: str, amount: int) -> str:
         recent_blockhash
     )
 
+    logger.info(f"[Game Pool Charge] [{charge_id}] Sending tx: {tx.signatures[0]}")
+
     send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Tx confirmed!")
+
     return str(send_tx_resp.value)

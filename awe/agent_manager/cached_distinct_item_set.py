@@ -12,7 +12,7 @@ class CachedDistinctItemSet:
         self.logger = logging.getLogger(f"[CachedDistinceItemSet][{key_prefix}]")
 
     def iterate_query(self, statement, redis_key):
-        page_size = 10000
+        page_size = 1000
         current_page = 0
 
         while(True):
@@ -21,8 +21,9 @@ class CachedDistinctItemSet:
                 items = session.exec(current_statement).all()
 
                 if len(items) > 0:
+                    addresses = [item[0] for item in items]
                     try:
-                        cache.sadd(redis_key, *items)
+                        cache.sadd(redis_key, *addresses)
                     except Exception as e:
                         self.logger.error(e)
                         raise Exception("Error writing to Redis cache")
@@ -34,20 +35,18 @@ class CachedDistinctItemSet:
 
     def load_items_from_db_for_today(self, day: int, user_agent_id: int, redis_key: str):
 
-        statement = select(self.model_attr).distinct().where(
+        statement = select(self.model_attr, self.model.id).distinct().where(
                 self.model.user_agent_id == user_agent_id,
                 self.model.created_at >= day,
-                self.model.tx_hash.is_not(None),
-                self.model.tx_hash != ""
+                self.model.status == 6
             ).order_by(self.model.id.asc())
 
         self.iterate_query(statement, redis_key)
 
     def load_items_from_db_total(self, user_agent_id: int, redis_key: str) -> list[str]:
-        statement = select(self.model_attr).distinct().where(
+        statement = select(self.model_attr, self.model.id).distinct().where(
                     self.model.user_agent_id == user_agent_id,
-                    self.model.tx_hash.is_not(None),
-                    self.model.tx_hash != ""
+                    self.model.status == 6
                 ).order_by(self.model.id.asc())
 
         self.iterate_query(statement, redis_key)
@@ -57,6 +56,7 @@ class CachedDistinctItemSet:
         total_items_keys = f"AGENT_STATS_ITEMS_{self.key_prefix}_TOTAL_{user_agent_id}"
 
         # Check if the data exists in redis
+
         try:
             today_addresses = cache.scard(today_items_keys)
         except Exception as e:

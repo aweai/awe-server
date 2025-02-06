@@ -93,17 +93,13 @@ class UserAgentData(SQLModel, table=True):
             session.commit()
 
     @classmethod
-    def add_income_shares(cls, user_agent_id: int, amount: int):
-        with Session(engine) as session:
-            statement = select(UserAgentData).where(
-                UserAgentData.user_agent_id == user_agent_id
-            )
-            user_agent_data = session.exec(statement).first()
-
-            user_agent_data.total_income_shares = UserAgentData.total_income_shares + amount
-
-            session.add(user_agent_data)
-            session.commit()
+    def add_income_shares(cls, user_agent_id: int, amount: int, session: Session):
+        statement = select(UserAgentData).where(
+            UserAgentData.user_agent_id == user_agent_id
+        )
+        user_agent_data = session.exec(statement).first()
+        user_agent_data.total_income_shares = UserAgentData.total_income_shares + amount
+        session.add(user_agent_data)
 
     @classmethod
     def add_staking(cls, user_agent_id: int, amount: int):

@@ -12,7 +12,7 @@ import spl.token.instructions as spl_token
 import time
 from awe.settings import settings
 from awe.celery import app
-from typing import List
+from typing import List, Tuple
 
 class AweOnSolana(AweOnChain):
 
@@ -147,7 +147,7 @@ class AweOnSolana(AweOnChain):
         return bytes(tx)
 
 
-    def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
+    def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the pool, agent creators and developers
         # Return the transaction hash
         task = app.send_task(
@@ -177,6 +177,7 @@ class AweOnSolana(AweOnChain):
         self.logger.info("Sent collect user staking task to the queue")
         return task.get()
 
+
     def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
         # Wait for the confirmation of the given tx
         # Or timeout
@@ -201,6 +202,15 @@ class AweOnSolana(AweOnChain):
 
             time.sleep(1)
 
+
+    def is_tx_confirmed(self, tx_hash: str) -> bool:
+        sig = Signature.from_string(tx_hash)
+        tx = self.http_client.get_transaction(tx_sig=sig, commitment=Finalized)
+        return tx.value is not None
+
+    def get_block_height(self) -> int:
+        block_height = self.http_client.get_block_height(commitment=Finalized)
+        return block_height.value
 
     def get_awe_circulating_supply(self) -> float:
         cir_supply_resp = self.http_client.get_token_supply(self.awe_mint_public_key)

@@ -1,7 +1,7 @@
 
 from abc import ABC, abstractmethod
 import logging
-from typing import List
+from typing import List, Tuple, Optional, Literal
 
 logger = logging.getLogger("[AweOnChain]")
 
@@ -51,7 +51,7 @@ class AweOnChain(ABC):
         pass
 
     @abstractmethod
-    def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
+    def collect_user_payment(self, user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> Tuple[str, int]:
         # Transfer tokens from the user wallet to the system wallet
         # Return the transaction hash
         pass
@@ -72,6 +72,14 @@ class AweOnChain(ABC):
     def wait_for_tx_confirmation(self, tx_hash: str, timeout: int):
         # Wait for the confirmation of the given tx
         # Or timeout
+        pass
+
+    @abstractmethod
+    def is_tx_confirmed(self, tx_hash: str) -> bool:
+        pass
+
+    @abstractmethod
+    def get_block_height(self) -> int:
         pass
 
     @abstractmethod

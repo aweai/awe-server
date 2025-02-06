@@ -2,6 +2,7 @@ from awe.models import TgUserDeposit, \
                         TgUserWithdraw, UserAgentData, UserStaking, \
                         TGBotUserWallet, UserAgent, UserAgentUserInvocations, \
                         UserReferrals
+from awe.models.tg_user_deposit import TgUserDepositStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
@@ -65,8 +66,6 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
         agent_creator_wallet = user_agent.user_address
         game_pool_division = user_agent.awe_agent.awe_token_config.game_pool_division
 
-        pool_share, creator_share, _ = settings.tn_share_user_payment(game_pool_division, amount)
-
         user_deposit = TgUserDeposit(
             user_agent_id=agent_id,
             tg_user_id=tg_user_id,
@@ -89,23 +88,19 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect User Payment] [User Deposit {user_deposit_id}] Error waiting for approve tx confirmation")
+        TgUserDeposit.update_user_deposit_status(user_deposit_id, TgUserDepositStatus.FAILED)
         send_user_notification(agent_id, tg_user_id, f"Payment error: we cannot confirm the approve tx. You can safely try to pay again now.")
         return
 
+    TgUserDeposit.update_user_deposit_status(user_deposit_id, TgUserDepositStatus.APPROVED)
     logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Approve tx confirmed!")
 
     # Collect user payment
-    tx = awe_on_chain.collect_user_payment(user_deposit_id, user_wallet_address, agent_creator_wallet, amount, game_pool_division)
+    tx, last_valid_block_height = awe_on_chain.collect_user_payment(user_deposit_id, user_wallet_address, agent_creator_wallet, amount, game_pool_division)
 
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Transfer tx confirmed! {tx}")
+    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Transfer tx sent! {tx}")
 
-    # Record stats
-    # Must before tx_hash is updated in TgUserDeposit
-    record_user_payment(agent_id, user_wallet_address, pool_share, creator_share)
-
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] User payment stats updated!")
-
-     # Record the transfer tx
+    # Record the transfer tx
     with Session(engine) as session:
 
         statement = select(TgUserDeposit).where(
@@ -114,39 +109,81 @@ def collect_user_payment(agent_id: int, tg_user_id: str, approve_tx: str):
 
         user_deposit = session.exec(statement).first()
         user_deposit.tx_hash = tx
+        user_deposit.tx_last_valid_block_height = last_valid_block_height
+        user_deposit.status = TgUserDepositStatus.TX_SENT
         session.add(user_deposit)
         session.commit()
 
     logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Transfer tx recorded!")
 
+
+def finalize_user_payment(user_deposit_id: int):
+
+    logger.info(f"[Finalize User Payment] [User Deposit {user_deposit_id}] Finalizing user deposit!")
+
     with Session(engine) as session:
+
+        statement = select(TgUserDeposit).where(TgUserDeposit.id == user_deposit_id)
+        tg_user_deposit = session.exec(statement).first()
+        user_wallet_address = tg_user_deposit.address
+        agent_id = tg_user_deposit.user_agent_id
+        tg_user_id = tg_user_deposit.tg_user_id
 
         statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
         user_agent = session.exec(statement).first()
 
+        game_pool_division = user_agent.awe_agent.awe_token_config.game_pool_division
+        pool_share, creator_share, _ = settings.tn_share_user_payment(game_pool_division, tg_user_deposit.amount)
+
+        # 1. Add agent pool
+
         if pool_share != 0:
-            # Add agent pool
             user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + pool_share
-
             session.add(user_agent.agent_data)
-            session.commit()
-            session.refresh(user_agent)
 
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Agent pool updated!")
+        # 2. Reset user payment invocation count
 
-    # Reset user payment invocation count
-    UserAgentUserInvocations.user_paid(agent_id, tg_user_id)
+        statement = select(UserAgentUserInvocations).where(
+            UserAgentUserInvocations.user_agent_id == agent_id,
+            UserAgentUserInvocations.tg_user_id == tg_user_id
+        )
 
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] User payment invocation count updated!")
+        user_invoke = session.exec(statement).first()
+        if user_invoke is None:
+            user_invoke = UserAgentUserInvocations(
+                user_agent_id=agent_id,
+                tg_user_id=tg_user_id,
+                current_round=user_agent.agent_data.current_round
+            )
+        else:
+            user_invoke.payment_invocations = 0
 
-    # Activate user referral
-    UserReferrals.activate(tg_user_id)
+            if user_invoke.current_round != user_agent.agent_data.current_round:
+                user_invoke.current_round = user_agent.agent_data.current_round
+                user_invoke.round_payments = 1
+            else:
+                user_invoke.round_payments = UserAgentUserInvocations.round_payments + 1
 
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] User referrals updated!")
+        session.add(user_invoke)
+
+        # 3. Activate user referral
+
+        UserReferrals.activate(tg_user_id, session)
+
+        # 4. Update stats
+
+        record_user_payment(agent_id, user_wallet_address, pool_share, creator_share, session)
+
+        # 5. Mark deposit as success
+
+        tg_user_deposit.status = TgUserDepositStatus.SUCCESS
+        session.add(tg_user_deposit)
+
+        session.commit()
+
+    logger.info(f"[Finalize User Payment] [User Deposit {user_deposit_id}] User payment finalized!")
 
     send_user_notification(agent_id, tg_user_id, "The payment is received. Have fun!")
-
-    logger.info(f"[Collect User Payment] [User Deposit {user_deposit_id}] Payment done!")
 
 
 def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx: str):

@@ -5,6 +5,7 @@ import time
 import logging
 import signal
 from awe.db import engine, init_engine
+from awe.cache import init_cache
 from sqlmodel import Session, select
 
 class AgentManager:
@@ -27,6 +28,7 @@ class AgentManager:
 
     def start_user_agent(self, user_agent_config: UserAgentConfig):
         init_engine()
+        init_cache()
         user_agent = UserAgent(user_agent_config)
         user_agent.start_tg_bot()
 

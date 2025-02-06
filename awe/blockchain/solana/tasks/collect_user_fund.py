@@ -8,11 +8,12 @@ import spl.token.instructions as spl_token
 from .utils import system_payer, awe_mint_public_key, http_client
 from awe.settings import settings
 import traceback
+from typing import Tuple
 
 logger = logging.getLogger("[Collect User Fund Task]")
 
 @app.task
-def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> str:
+def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wallet: str, amount: int, game_pool_division: int) -> Tuple[str, int]:
 
     pool_amount, agent_creator_amount, developer_amount = settings.tn_share_user_payment(game_pool_division, amount)
     logger.info(f"[User Deposit {user_deposit_id}] collecting user payment: {user_wallet}: {amount}, agent creator: {agent_creator_wallet}, pool: {pool_amount}, creator: {agent_creator_amount}, developer: {developer_amount}")
@@ -89,7 +90,10 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
     ))
     ixs.append(ix_developer)
 
-    recent_blockhash = http_client.get_latest_blockhash().value.blockhash
+    latest_blockhash = http_client.get_latest_blockhash().value
+
+    recent_blockhash = latest_blockhash.blockhash
+    last_valid_block_height = latest_blockhash.last_valid_block_height
 
     tx = Transaction.new_signed_with_payer(
         ixs,
@@ -101,7 +105,7 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
     logger.info(f"[User Deposit {user_deposit_id}] Sending tx: {tx.signatures[0]}")
 
     try:
-        send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=False))
+        send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=True))
     except Exception as e:
         logger.error(f"[User Deposit {user_deposit_id}] Failed sending the transaction")
         logger.error(e)
@@ -109,9 +113,9 @@ def collect_user_fund(user_deposit_id: int, user_wallet: str, agent_creator_wall
         raise(e)
 
     tx_hash = str(send_tx_resp.value)
-    logger.info(f"[User Deposit {user_deposit_id}] Tx confirmed! {tx_hash}")
+    logger.info(f"[User Deposit {user_deposit_id}] Tx sent! {tx_hash}")
 
-    return tx_hash
+    return tx_hash, last_valid_block_height
 
 
 @app.task

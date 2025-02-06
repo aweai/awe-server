@@ -58,39 +58,36 @@ class UserReferrals(SQLModel, table=True):
         return int(multiplier)
 
     @classmethod
-    def activate(cls, tg_user_id: str):
+    def activate(cls, tg_user_id: str, session: Session):
 
-        with Session(engine) as session:
-            target_statement = select(UserReferrals).where(
-                UserReferrals.tg_user_id == tg_user_id
+        target_statement = select(UserReferrals).where(
+            UserReferrals.tg_user_id == tg_user_id
+        )
+
+        target_user_referrals = session.exec(target_statement).first()
+
+        if target_user_referrals is None or target_user_referrals.activated == True:
+            return
+
+        target_user_referrals.activated = True
+        session.add(target_user_referrals)
+
+        # Prevent loop in the referral chain
+        referral_ids = {
+            target_user_referrals.id: 1
+        }
+
+        # Trace the referral chain up
+        while target_user_referrals.referred_by is not None and target_user_referrals.referred_by not in referral_ids:
+            referral_ids[target_user_referrals.referred_by] = 1
+
+            next_target_statement = select(UserReferrals).where(
+                UserReferrals.id == target_user_referrals.referred_by
             )
 
-            target_user_referrals = session.exec(target_statement).first()
-
-            if target_user_referrals is None or target_user_referrals.activated == True:
-                return
-
-            target_user_referrals.activated = True
+            target_user_referrals = session.exec(next_target_statement).first()
+            target_user_referrals.num_activated_referrals = UserReferrals.num_activated_referrals + 1
             session.add(target_user_referrals)
-
-            # Prevent loop in the referral chain
-            referral_ids = {
-                target_user_referrals.id: 1
-            }
-
-            # Trace the referral chain up
-            while target_user_referrals.referred_by is not None and target_user_referrals.referred_by not in referral_ids:
-                referral_ids[target_user_referrals.referred_by] = 1
-
-                next_target_statement = select(UserReferrals).where(
-                    UserReferrals.id == target_user_referrals.referred_by
-                )
-
-                target_user_referrals = session.exec(next_target_statement).first()
-                target_user_referrals.num_activated_referrals = UserReferrals.num_activated_referrals + 1
-                session.add(target_user_referrals)
-
-            session.commit()
 
 
     @classmethod

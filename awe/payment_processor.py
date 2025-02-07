@@ -16,8 +16,10 @@ from awe.agent_manager.agent_fund import finalize_user_payment, \
                                         finalize_refund_agent_staking
 from awe.blockchain import awe_on_chain
 import traceback
+import time
 
 batch_size = 10
+fetch_interval = 1
 
 class PaymentProcessor:
     # Check the tx status
@@ -72,6 +74,8 @@ class PaymentProcessor:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
 
+                time.sleep(fetch_interval)
+
             return len(tg_user_deposits)
 
 
@@ -91,6 +95,8 @@ class PaymentProcessor:
                 except Exception as e:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
+
+                time.sleep(fetch_interval)
 
             return len(user_stakings)
 
@@ -112,6 +118,8 @@ class PaymentProcessor:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
 
+                time.sleep(fetch_interval)
+
             return len(game_pool_charges)
 
 
@@ -131,6 +139,8 @@ class PaymentProcessor:
                 except Exception as e:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
+
+                time.sleep(fetch_interval)
 
             return len(tg_user_withdraws)
 
@@ -152,6 +162,8 @@ class PaymentProcessor:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
 
+                time.sleep(fetch_interval)
+
             return len(user_stakings)
 
 
@@ -171,6 +183,8 @@ class PaymentProcessor:
                 except Exception as e:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
+
+                time.sleep(fetch_interval)
 
             return len(agent_refunds)
 

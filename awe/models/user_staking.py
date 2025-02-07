@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel, Field, select, Session
+from sqlmodel import SQLModel, Field, select, Session, or_
 from .utils import unix_timestamp_in_seconds
 from typing import List, Annotated
 from typing_extensions import Self
@@ -37,7 +37,10 @@ class UserStaking(SQLModel, table=True):
             statement = select(UserStaking).where(
                 UserStaking.tg_user_id == tg_user_id,
                 UserStaking.user_agent_id == user_agent_id,
-                UserStaking.released_at.is_(None)
+                or_(
+                    UserStaking.release_status.is_(None),
+                    UserStaking.release_status != UserStakingStatus.SUCCESS
+                )
             ).order_by(UserStaking.created_at.asc())
 
             return session.exec(statement).all()

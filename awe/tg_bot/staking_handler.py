@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import logging
 import asyncio
-from awe.models import UserStaking
+from awe.models.user_staking import UserStaking, UserStakingStatus
 from datetime import datetime
 from awe.settings import settings
 import prettytable
@@ -52,14 +52,24 @@ class StakingHandler(PaymentLimitHandler):
             table = prettytable.PrettyTable(["ID", "Staking", "Staked at", "Locked until"])
 
             for staking_item in staking_list:
-                if staking_item.tx_hash is None or staking_item.tx_hash == "":
+
+                if staking_item.status < UserStakingStatus.FAILED:
                     dt_str = "Pending"
-                    rt_str = "-"
+                elif staking_item.status == UserStakingStatus.FAILED:
+                    dt_str = "Failed"
                 else:
                     dt = datetime.fromtimestamp(staking_item.created_at)
                     dt_str = dt.strftime("%Y-%m-%d")
+
+                if staking_item.status != UserStakingStatus.SUCCESS:
+                    rt_str = "-"
+                elif staking_item.release_status is None:
                     rt = datetime.fromtimestamp(staking_item.created_at + settings.tn_user_staking_locking_days * 86400)
                     rt_str = rt.strftime("%Y-%m-%d")
+                elif staking_item.release_status < UserStakingStatus.FAILED:
+                    rt_str = "Pending"
+                elif staking_item.status == UserStakingStatus.FAILED:
+                    rt_str = "Failed"
 
                 table.add_row([staking_item.id, f"{staking_item.amount}.00", dt_str, rt_str])
 

@@ -80,10 +80,6 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
         if user_agent.awe_agent is not None:
             user_agent.awe_agent = AweAgent.model_validate(user_agent.awe_agent)
 
-        # User price must be larger than the config
-        if user_agent.awe_agent.awe_token_config.user_price < settings.min_player_payment_amount:
-            raise Exception("User price too low")
-
         # Token must be enabled for now
         user_agent.awe_agent.awe_token_enabled = True
 

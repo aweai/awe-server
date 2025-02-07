@@ -4,6 +4,7 @@ from awe.models.awe_agent import AweAgent, AweAgentSAType
 from awe.models.tg_bot import TGBot, TGBotSAType
 from .utils import unix_timestamp_in_seconds
 from awe.models.user_agent_data import UserAgentData
+from awe.settings import settings
 
 class UserAgent(SQLModel, table=True):
     id: int | None = Field(primary_key=True, default=None)
@@ -50,7 +51,7 @@ class UserAgent(SQLModel, table=True):
                 or self.awe_agent.awe_token_config.max_token_per_tx <= 0 \
                 or self.awe_agent.awe_token_config.max_invocation_per_payment < 0 \
                 or self.awe_agent.awe_token_config.max_payment_per_round < 0 \
-                or self.awe_agent.awe_token_config.user_price < 10 \
+                or self.awe_agent.awe_token_config.user_price < settings.min_player_payment_amount \
                 or self.awe_agent.awe_token_config.game_pool_division < 0 \
                 or self.awe_agent.awe_token_config.game_pool_division > 100:
 

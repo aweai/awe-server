@@ -88,6 +88,10 @@ class StakingHandler(PaymentLimitHandler):
         if user_id is None:
             return
 
+        if amount < settings.min_player_staking_amount:
+            await context.bot.send_message(update.effective_chat.id, f"At least $AWE {settings.min_player_staking_amount} is required")
+            return
+
         user_wallet = await self.check_wallet(update, context, False)
 
         if user_wallet is None:
@@ -140,7 +144,7 @@ class StakingHandler(PaymentLimitHandler):
     def get_usage_text(self) -> str:
         usage = "Command usage:\n\n"
         usage = usage + "/staking - List your current staking\n"
-        usage = usage + "/staking add {amount} - Add staking\n"
-        usage = usage + "/staking release {id} - Release staking"
+        usage = usage + f"/staking add <amount> - Add staking (min {settings.min_player_staking_amount})\n"
+        usage = usage + "/staking release <id> - Release staking"
 
         return usage

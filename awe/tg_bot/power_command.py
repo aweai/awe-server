@@ -82,5 +82,5 @@ async def add_power(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_usage_text() -> str:
     usage = "Command usage:\n\n"
     usage = usage + "/power - Check your current power\n"
-    usage = usage + "/power add {code} - Add power to user\n"
+    usage = usage + "/power add <code> - Add power to user\n"
     return usage

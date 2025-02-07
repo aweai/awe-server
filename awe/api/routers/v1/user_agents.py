@@ -4,7 +4,6 @@ from awe.models.user_agent import UserAgent
 from awe.models.user_agent_data import UserAgentData
 from awe.models.tg_bot import TGBot
 from awe.models.awe_agent import AweAgent, LLMConfig
-from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.db import engine
 from sqlmodel import Session, select, func, col, SQLModel
 from ...dependencies import get_current_user, validate_user_agent
@@ -17,6 +16,8 @@ from awe.settings import settings
 import logging
 import re
 from awe.maintenance import is_in_maintenance_sync
+from awe.agent_manager.agent_fund import collect_game_pool_charge, refund_agent_staking
+
 
 logger = logging.getLogger("[User Agents API]")
 
@@ -255,7 +256,7 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
         session.commit()
         session.refresh(user_agent)
 
-        background_tasks.add_task(return_agent_staking, user_agent.user_address, user_agent.staking_amount)
+        background_tasks.add_task(refund_agent_staking, user_agent.id, user_agent.user_address, user_agent.staking_amount)
 
 
 @router.post("/{agent_id}/round", response_model=UserAgentData)
@@ -305,12 +306,6 @@ def upload_pfp(agent_id, file: UploadFile, _: Annotated[bool, Depends(validate_u
     img_resized.save(f"persisted_data/pfps/{agent_id}.png", "PNG")
 
 
-def return_agent_staking(creator_address: str, amount: int):
-    logger.info(f"Returning agent staking {creator_address}: {amount}")
-    amount_full = int(int(amount) * int(1e9))
-    awe_on_chain.transfer_to_user(creator_address, amount_full)
-
-
 @router.post("/{agent_id}/game-pool")
 def charge_game_pool(agent_id: int, amount: Annotated[int, Query(gt=0)], tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
     if is_in_maintenance_sync():
@@ -327,70 +322,3 @@ def charge_game_pool(agent_id: int, amount: Annotated[int, Query(gt=0)], tx: str
             raise HTTPException(400, "Agent not found")
 
     background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
-
-
-def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
-
-    # Record the charge request
-
-    with Session(engine) as session:
-        game_pool_charge = GamePoolCharge(
-            user_agent_id=agent_id,
-            address=user_address,
-            amount=amount,
-            approve_tx_hash=approve_tx
-        )
-        session.add(game_pool_charge)
-        session.commit()
-        session.refresh(game_pool_charge)
-
-        charge_id = game_pool_charge.id
-
-    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge request recorded! {approve_tx}")
-
-    try:
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
-    except Exception as e:
-        logger.error(e)
-        GamePoolCharge.update_status(charge_id, GamePoolChargeStatus.FAILED)
-        raise HTTPException(500, "Cannot confirm the apporve tx. You can safely try again now.")
-
-    logger.info(f"[Game Pool Charge] [{charge_id}] Approve tx confirmed!")
-
-    collect_tx, last_valid_block_height = awe_on_chain.collect_game_pool_charge(charge_id, user_address, amount)
-
-    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx sent! {collect_tx}")
-
-    with Session(engine) as session:
-        statement = select(GamePoolCharge).where(GamePoolCharge.id == charge_id)
-        game_pool_charge = session.exec(statement).first()
-        game_pool_charge.tx_hash = collect_tx
-        game_pool_charge.tx_last_valid_block_height = last_valid_block_height
-        game_pool_charge.status = GamePoolChargeStatus.TX_SENT
-        session.add(game_pool_charge)
-        session.commit()
-
-    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx recorded!")
-
-
-def finalize_game_pool_charge(charge_id: int):
-
-    with Session(engine) as session:
-
-        statement = select(GamePoolCharge).where(GamePoolCharge.id == charge_id)
-        game_pool_charge = session.exec(statement).first()
-
-        statement = select(UserAgent).where(UserAgent.id == game_pool_charge.user_agent_id)
-        user_agent = session.exec(statement).first()
-
-        # Update the game pool
-        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + game_pool_charge.amount
-        session.add(user_agent.agent_data)
-
-        # Update the charge status
-        game_pool_charge.status = GamePoolChargeStatus.SUCCESS
-        session.add(game_pool_charge)
-
-        session.commit()
-
-    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge finalized!")

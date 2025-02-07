@@ -7,8 +7,13 @@ from awe.models.tg_user_deposit import TgUserDeposit, TgUserDepositStatus
 from awe.models.user_staking import UserStaking, UserStakingStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
-from awe.agent_manager.agent_fund import finalize_user_payment, finalize_user_staking, finalize_transfer_to_user, finalize_release_staking
-from awe.api.routers.v1.user_agents import finalize_game_pool_charge
+from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
+from awe.agent_manager.agent_fund import finalize_user_payment, \
+                                        finalize_user_staking, \
+                                        finalize_transfer_to_user, \
+                                        finalize_release_staking, \
+                                        finalize_game_pool_charge, \
+                                        finalize_refund_agent_staking
 from awe.blockchain import awe_on_chain
 import traceback
 
@@ -34,7 +39,7 @@ class PaymentProcessor:
 
     def start(self):
         while not self.kill_now:
-
+            self.logger.debug("checking pending TXs...")
             processed = 0
 
             processed = processed + self.process_user_deposit()
@@ -42,6 +47,7 @@ class PaymentProcessor:
             processed = processed + self.process_game_pool_charge()
             processed = processed + self.process_user_withdraw()
             processed = processed + self.process_release_staking()
+            processed = processed + self.process_agent_refund()
 
             if processed == 0:
                 time.sleep(5)
@@ -131,7 +137,7 @@ class PaymentProcessor:
 
     def process_release_staking(self) -> int:
         with Session(engine) as session:
-            statement = select(UserStaking).where(UserStaking.release_status == TgUserWithdrawStatus.TX_SENT).order_by(TgUserWithdraw.id.asc()).limit(batch_size)
+            statement = select(UserStaking).where(UserStaking.release_status == UserStakingStatus.TX_SENT).order_by(UserStaking.id.asc()).limit(batch_size)
             user_stakings = session.exec(statement).all()
             for user_staking in user_stakings:
                 try:
@@ -141,12 +147,32 @@ class PaymentProcessor:
                     if tx_status == "success":
                         finalize_release_staking(user_staking.id)
                     elif tx_status == "failed":
-                        UserStaking.update_release_status(user_staking.id, TgUserWithdrawStatus.FAILED)
+                        UserStaking.update_release_status(user_staking.id, UserStakingStatus.FAILED)
                 except Exception as e:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())
 
             return len(user_stakings)
+
+
+    def process_agent_refund(self) -> int:
+        with Session(engine) as session:
+            statement = select(UserAgentRefund).where(UserAgentRefund.status == UserAgentRefundStatus.TX_SENT).order_by(UserAgentRefund.id.asc()).limit(batch_size)
+            agent_refunds = session.exec(statement).all()
+            for agent_refund in agent_refunds:
+                try:
+                    self.logger.info(f"[Agent Refund {agent_refund.id}] Check tx status...")
+                    tx_status = self.get_tx_status(agent_refund.tx_hash, agent_refund.tx_last_valid_block_height)
+                    self.logger.info(f"[Release User Staking {agent_refund.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_refund_agent_staking(agent_refund.id)
+                    elif tx_status == "failed":
+                        UserAgentRefund.update_status(agent_refund.id, UserAgentRefund.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+            return len(agent_refunds)
 
 
     def get_tx_status(self, tx_hash: str, last_valid_block_height: int) -> str:

@@ -5,10 +5,12 @@ from awe.models import TgUserDeposit, \
 from awe.models.tg_user_deposit import TgUserDepositStatus
 from awe.models.user_staking import UserStakingStatus
 from awe.models.tg_user_withdraw import TgUserWithdrawStatus
+from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
+from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
-from sqlmodel import Session, select, or_
+from sqlmodel import Session, select
 from awe.db import engine
 import logging
 import traceback
@@ -514,3 +516,127 @@ def finalize_release_staking(staking_id: int):
         session.commit()
 
     logger.info(f"[Release User Staking] [{staking_id}] Finalized!")
+
+
+def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, approve_tx: str):
+
+    # Record the charge request
+
+    with Session(engine) as session:
+        game_pool_charge = GamePoolCharge(
+            user_agent_id=agent_id,
+            address=user_address,
+            amount=amount,
+            approve_tx_hash=approve_tx
+        )
+        session.add(game_pool_charge)
+        session.commit()
+        session.refresh(game_pool_charge)
+
+        charge_id = game_pool_charge.id
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge request recorded! {approve_tx}")
+
+    try:
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+    except Exception as e:
+        logger.error(e)
+        GamePoolCharge.update_status(charge_id, GamePoolChargeStatus.FAILED)
+        raise Exception(f"[Game Pool Charge] [{charge_id}] Cannot confirm the apporve tx.")
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Approve tx confirmed!")
+
+    collect_tx, last_valid_block_height = awe_on_chain.collect_game_pool_charge(charge_id, user_address, amount)
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx sent! {collect_tx}")
+
+    with Session(engine) as session:
+        statement = select(GamePoolCharge).where(GamePoolCharge.id == charge_id)
+        game_pool_charge = session.exec(statement).first()
+        game_pool_charge.tx_hash = collect_tx
+        game_pool_charge.tx_last_valid_block_height = last_valid_block_height
+        game_pool_charge.status = GamePoolChargeStatus.TX_SENT
+        session.add(game_pool_charge)
+        session.commit()
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Transfer tx recorded!")
+
+
+def finalize_game_pool_charge(charge_id: int):
+
+    with Session(engine) as session:
+
+        statement = select(GamePoolCharge).where(GamePoolCharge.id == charge_id)
+        game_pool_charge = session.exec(statement).first()
+
+        statement = select(UserAgent).where(UserAgent.id == game_pool_charge.user_agent_id)
+        user_agent = session.exec(statement).first()
+
+        # Update the game pool
+        user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote + game_pool_charge.amount
+        session.add(user_agent.agent_data)
+
+        # Update the charge status
+        game_pool_charge.status = GamePoolChargeStatus.SUCCESS
+        session.add(game_pool_charge)
+
+        session.commit()
+
+    logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge finalized!")
+
+
+def refund_agent_staking(agent_id: int, creator_address: str, amount: int):
+
+    logger.info(f"Returning staking for agent {agent_id}({creator_address}): {amount}")
+
+    # Record the refund request
+
+    with Session(engine) as session:
+        agent_refund = UserAgentRefund(
+            user_agent_id=agent_id,
+            address=creator_address,
+            amount=amount
+        )
+
+        session.add(agent_refund)
+        session.commit()
+        session.refresh(agent_refund)
+
+        refund_id = agent_refund.id
+
+    logger.info(f"[Refund Agent Staking] [{refund_id}] request created!")
+
+    tx, last_valid_block_height = awe_on_chain.transfer_to_user(f"agent_refund_{refund_id}", creator_address, amount)
+
+    logger.info(f"[Refund Agent Staking] [{refund_id}] tx sent! {tx}")
+
+    # Update the refund request
+
+    with Session(engine) as session:
+        statement = select(UserAgentRefund).where(UserAgentRefund.id == refund_id)
+        agent_refund = session.exec(statement).first()
+
+        agent_refund.tx_hash = tx
+        agent_refund.tx_last_valid_block_height = last_valid_block_height
+        agent_refund.status = UserAgentRefundStatus.TX_SENT
+
+        session.add(agent_refund)
+        session.commit()
+
+    logger.info(f"[Refund Agent Staking] [{refund_id}] tx recorded!")
+
+
+def finalize_refund_agent_staking(refund_id: int):
+
+    logger.info(f"[Refund Agent Staking] [{refund_id}] finalizing agent refund")
+
+    with Session(engine) as session:
+        statement = select(UserAgentRefund).where(UserAgentRefund.id == refund_id)
+        agent_refund = session.exec(statement).first()
+
+        agent_refund.status = UserAgentRefundStatus.SUCCESS
+
+        session.add(agent_refund)
+        session.commit()
+
+    logger.info(f"[Refund Agent Staking] [{refund_id}] refund finalized!")

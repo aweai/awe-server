@@ -17,6 +17,6 @@ class TgUserAccount(SQLModel, table=True):
             statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
             user_account = session.exec(statement).first()
             if user_account is None:
-                return 0
+                return 0, 0
 
             return user_account.balance, user_account.rewards

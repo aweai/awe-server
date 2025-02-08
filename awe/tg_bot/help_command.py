@@ -7,7 +7,9 @@ def get_help_message() -> str:
     msg = msg + "/chances - Chances left to interact\n\n"
     msg = msg + "/wallet - Wallet binding\n\n"
     msg = msg + "/staking - Staking info\n\n"
-    msg = msg + "/balance - Check your wallet balance\n\n"
+    msg = msg + "/balance - Check your account balance\n\n"
+    msg = msg + "/deposit <amount> - Deposit from wallet into your account\n\n"
+    msg = msg + "/withdraw <amount> - Withdraw to your wallet\n\n"
     msg = msg + "/power - Power info\n\n"
     msg = msg + "/reset - Clear chat history and start over\n\n"
 

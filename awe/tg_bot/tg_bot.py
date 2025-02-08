@@ -8,10 +8,10 @@ import io
 from pathlib import Path
 import asyncio
 from ..models.tg_bot import TGBot as TGBotConfig
-from .payment_limit_handler import PaymentLimitHandler
+from .payment_handler import PaymentHandler
 from .staking_handler import StakingHandler
 from .help_command import help_command, get_help_message
-from .balance_handler import BalanceHandler
+from .account_handler import AccountHandler
 from .power_command import power_command
 from .reset_handler import ResetHandler
 from pathlib import Path
@@ -39,7 +39,7 @@ class TGBot:
     def __init__(self, agent: AweAgent, tg_bot_config: TGBotConfig, user_agent_id: int) -> None:
 
         self.logger = logging.getLogger(f"[TG Bot] [{user_agent_id}]")
-        self.aweAgent = agent
+        self.awe_agent = agent
         self.tg_bot_config = tg_bot_config
         self.user_agent_id = user_agent_id
 
@@ -51,27 +51,38 @@ class TGBot:
         start_handler = CommandHandler('start', self.start_command)
         self.application.add_handler(start_handler)
 
-        # Payment limit handler
-        self.payment_limit_handler = PaymentLimitHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+        # Payment handler
+        self.payment_handler = PaymentHandler(self.user_agent_id, self.tg_bot_config, self.awe_agent)
 
-        wallet_command_handler = CommandHandler('wallet', self.payment_limit_handler.wallet_command)
-        self.application.add_handler(wallet_command_handler)
+        # Pay command
+        pay_command_handler = CommandHandler("pay", self.payment_handler.pay_for_current_round)
+        self.application.add_handler(pay_command_handler)
 
         # Chances command
         chances_handler = CommandHandler("chances", self.chances_command)
         self.application.add_handler(chances_handler)
 
         # Staking handler
-        self.staking_handler = StakingHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+        self.staking_handler = StakingHandler(self.user_agent_id, self.tg_bot_config, self.awe_agent)
 
         # Staking command
         staking_command_handler = CommandHandler("staking", self.staking_handler.staking_command)
         self.application.add_handler(staking_command_handler)
 
-        # Balance handler
-        self.balance_handler = BalanceHandler(self.user_agent_id)
-        balance_command_handler = CommandHandler("balance", self.balance_handler.balance_command)
+        # Account handler
+        self.account_handler = AccountHandler(self.user_agent_id, self.tg_bot_config, self.awe_agent)
+
+        balance_command_handler = CommandHandler("balance", self.account_handler.balance_command)
         self.application.add_handler(balance_command_handler)
+
+        deposit_command_handler = CommandHandler("deposit", self.account_handler.deposit_command)
+        self.application.add_handler(deposit_command_handler)
+
+        withdraw_command_handler = CommandHandler("withdraw", self.account_handler.withraw_command)
+        self.application.add_handler(withdraw_command_handler)
+
+        wallet_command_handler = CommandHandler('wallet', self.account_handler.wallet_command)
+        self.application.add_handler(wallet_command_handler)
 
         # Power command
         power_command_handler = CommandHandler("power", power_command)
@@ -82,7 +93,7 @@ class TGBot:
         self.application.add_handler(help_command_handler)
 
         # Reset command
-        self.reset_handler = ResetHandler(self.user_agent_id, self.tg_bot_config, self.aweAgent)
+        self.reset_handler = ResetHandler(self.user_agent_id, self.tg_bot_config, self.awe_agent)
         reset_command_handler = CommandHandler("reset", self.reset_handler.reset_command)
         self.application.add_handler(reset_command_handler)
 
@@ -121,17 +132,19 @@ class TGBot:
         if not await check_maintenance(update, context):
             return
 
-        if update.effective_chat is None:
+        if update.effective_chat is None or update.effective_user is None:
             return
 
-        invocation_chances, payment_chances = await self.payment_limit_handler.get_payment_chances(update)
+        user_id = str(update.effective_user.id)
+
+        invocation_chances, payment_chances = await self.payment_handler.get_chances(user_id)
 
         if invocation_chances == -1:
             msg = "This Memegent has no invocation limit."
         else:
             msg = f"{invocation_chances} messages left for this play."
 
-            if self.aweAgent.config.awe_token_config.max_payment_per_round != 0:
+            if self.awe_agent.config.awe_token_config.max_payment_per_round != 0:
                 msg = msg + f"\n\n{payment_chances} payment chances left for this round."
             else:
                 msg = msg + "\n\nReset by paying again."
@@ -142,18 +155,31 @@ class TGBot:
     def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.error("Exception while handling an update:", exc_info=context.error)
 
+
     def read_image_file(self, image_path: Path) -> bytes:
         image = Image.open(image_path)
         image_bytes = io.BytesIO()
         image.save(image_bytes, format="JPEG")
         return image_bytes.getvalue()
 
+
     async def check_limits(self, update: Update, context: ContextTypes.DEFAULT_TYPE, is_group_chat: bool) -> bool:
 
-        # Check payment limit
-        if self.aweAgent.config.awe_token_enabled:
-            if not await self.payment_limit_handler.check_deposit(update, context, is_group_chat):
-                return False
+        if update.effective_user is None or update.effective_chat is None:
+            return False
+
+        user_id = str(update.effective_user.id)
+
+        invocation_chances, payment_chances = await self.payment_handler.get_chances(user_id)
+
+        if invocation_chances == 0:
+            if payment_chances == 0:
+                await update.message.reply_text("You have reached the limit of this round. Please wait for the next round.")
+            elif is_group_chat:
+                await update.message.reply_text(f"Please DM me to pay first.")
+            else:
+                await self.payment_handler.ask_for_payment(update, context)
+            return False
 
         return True
 
@@ -173,7 +199,7 @@ class TGBot:
 
         input = "[Private chat] " + update.message.text
 
-        resp = await self.aweAgent.get_response(
+        resp = await self.awe_agent.get_response(
             input,
             user_id,
             user_id)
@@ -211,7 +237,7 @@ class TGBot:
             if not await self.check_limits(update, context, True):
                 return
 
-            resp = await self.aweAgent.get_response(
+            resp = await self.awe_agent.get_response(
                 user_message,
                 user_id,
                 chat_id
@@ -221,7 +247,7 @@ class TGBot:
             await self.increase_invocation(user_id)
             await asyncio.to_thread(self.log_interact, user_id, chat_id, user_message, resp)
         else:
-            await self.aweAgent.add_message(
+            await self.awe_agent.add_message(
                 user_message,
                 user_id,
                 chat_id

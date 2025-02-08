@@ -1,4 +1,4 @@
-from .payment_limit_handler import PaymentLimitHandler
+from .account_handler import AccountHandler
 from telegram import Update
 from telegram.ext import ContextTypes
 import logging
@@ -11,10 +11,12 @@ from awe.agent_manager.agent_fund import release_user_staking, ReleaseStakingNot
 import time
 from .bot_maintenance import check_maintenance
 
-class StakingHandler(PaymentLimitHandler):
+class StakingHandler(AccountHandler):
 
-    def __init__(self, user_agent_id, tg_bot_config, aweAgent):
-        super().__init__(user_agent_id, tg_bot_config, aweAgent)
+    def __init__(self, user_agent_id, tg_bot_config, awe_agent):
+        self.user_agent_id = user_agent_id
+        self.tg_bot_config = tg_bot_config
+        self.awe_agent = awe_agent
         self.logger = logging.getLogger("[StakingHandler]")
 
     async def staking_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -97,7 +99,7 @@ class StakingHandler(PaymentLimitHandler):
         if user_wallet is None:
             return
 
-        if not await self.check_user_balance(user_wallet.address, amount, update, context):
+        if not await self.check_wallet_balance(user_wallet.address, amount, update, context):
             return
 
         # Send the approve buttons

@@ -19,3 +19,6 @@ from .player_weekly_emissions import PlayerWeeklyEmissions
 from .staker_weekly_emissions import StakerWeeklyEmissions
 from .tg_user_dm_chat import TGUserDMChat
 from .user_agent_refund import UserAgentRefund
+from .tg_user_account import TgUserAccount
+from .tg_user_agent_payment import TgUserAgentPayment
+from .awe_developer_account import AweDeveloperAccount

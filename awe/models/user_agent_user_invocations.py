@@ -3,7 +3,6 @@ from sqlmodel import SQLModel, Field, Session, select
 from awe.db import engine
 from typing import Optional, Annotated
 from typing_extensions import Self
-from . import UserAgentData
 
 class UserAgentUserInvocations(SQLModel, table=True):
     id: int | None = Field(primary_key=True)

@@ -12,7 +12,7 @@ class UserAgentStatsPaymentDailyCounts(SQLModel, table=True):
     addresses: int = Field(default=0)
 
     @classmethod
-    def add_payment(cls, user_agent_id: int, pool_amount: int, creator_amount: int, is_new_address: bool, session: Session):
+    def add_payment(cls, user_agent_id: int, pool_amount: int, creator_amount: int, session: Session):
         # Update the invocation count for today
         day = get_day_as_timestamp()
 
@@ -39,8 +39,5 @@ class UserAgentStatsPaymentDailyCounts(SQLModel, table=True):
 
             if creator_amount != 0:
                 stats_data.creator_amount = UserAgentStatsPaymentDailyCounts.creator_amount + creator_amount
-
-            if is_new_address:
-                stats_data.addresses = UserAgentStatsPaymentDailyCounts.addresses + 1
 
         session.add(stats_data)

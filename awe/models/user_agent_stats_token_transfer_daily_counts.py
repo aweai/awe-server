@@ -11,7 +11,7 @@ class UserAgentStatsTokenTransferDailyCounts(SQLModel, table=True):
     addresses: int = Field(default=0)
 
     @classmethod
-    def add_transfer(cls, user_agent_id: int, amount: int, is_new_address: bool, session: Session):
+    def add_transfer(cls, user_agent_id: int, amount: int, session: Session):
         # Update the invocation count for today
         day = get_day_as_timestamp()
 
@@ -32,8 +32,5 @@ class UserAgentStatsTokenTransferDailyCounts(SQLModel, table=True):
         else:
             stats_data.transactions = UserAgentStatsTokenTransferDailyCounts.transactions + 1
             stats_data.amount = UserAgentStatsTokenTransferDailyCounts.amount + amount
-
-            if is_new_address:
-                stats_data.addresses = UserAgentStatsTokenTransferDailyCounts.addresses + 1
 
         session.add(stats_data)

@@ -110,6 +110,7 @@ class AweSettings(BaseSettings):
 
     min_player_payment_amount: int = 1000
     min_player_staking_amount: int = 1000
+    min_player_deposit_amount: int = 10000
 
     def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 

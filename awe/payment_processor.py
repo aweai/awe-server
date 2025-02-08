@@ -8,7 +8,7 @@ from awe.models.user_staking import UserStaking, UserStakingStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
-from awe.agent_manager.agent_fund import finalize_user_payment, \
+from awe.agent_manager.agent_fund import finalize_user_deposit, \
                                         finalize_user_staking, \
                                         finalize_transfer_to_user, \
                                         finalize_release_staking, \
@@ -67,9 +67,9 @@ class PaymentProcessor:
                     tx_status = self.get_tx_status(tg_user_deposit.tx_hash, tg_user_deposit.tx_last_valid_block_height)
                     self.logger.info(f"[User Deposit {tg_user_deposit.id}] Tx status {tx_status}")
                     if tx_status == "success":
-                        finalize_user_payment(tg_user_deposit.id)
+                        finalize_user_deposit(tg_user_deposit.id)
                     elif tx_status == "failed":
-                        TgUserDeposit.update_user_deposit_status(tg_user_deposit.id, TgUserDepositStatus.FAILED)
+                        TgUserDeposit.update_status(tg_user_deposit.id, TgUserDepositStatus.FAILED)
                 except Exception as e:
                     self.logger.error(e)
                     self.logger.error(traceback.format_exc())

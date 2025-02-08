@@ -13,6 +13,9 @@ class UserAgentData(SQLModel, table=True):
     current_round: Annotated[int, Field(default=1)] = 1
     current_round_started_at: Annotated[int, Field(default=0)] = 0
 
+    # Creator balance
+    awe_token_creator_balance: Annotated[int, Field(default=0)] = 0
+
     # Game pool
     awe_token_quote: Annotated[int, Field(default=0)] = 0
 
@@ -77,7 +80,7 @@ class UserAgentData(SQLModel, table=True):
 
 
     @classmethod
-    def add_awe_token_transfer_stats(cls, user_agent_id: int, amount: int, is_new_address: bool, session: Session):
+    def add_awe_token_transfer_stats(cls, user_agent_id: int, amount: int, session: Session):
         statement = select(UserAgentData).where(
             UserAgentData.user_agent_id == user_agent_id
         )
@@ -86,19 +89,6 @@ class UserAgentData(SQLModel, table=True):
         user_agent_data.awe_token_total_transactions = UserAgentData.awe_token_total_transactions + 1
         user_agent_data.awe_token_total_transferred = UserAgentData.awe_token_total_transferred + amount
 
-        if is_new_address:
-            user_agent_data.awe_token_total_addresses = UserAgentData.awe_token_total_addresses + 1
-
-        session.add(user_agent_data)
-
-
-    @classmethod
-    def add_income_shares(cls, user_agent_id: int, amount: int, session: Session):
-        statement = select(UserAgentData).where(
-            UserAgentData.user_agent_id == user_agent_id
-        )
-        user_agent_data = session.exec(statement).first()
-        user_agent_data.total_income_shares = UserAgentData.total_income_shares + amount
         session.add(user_agent_data)
 
     @classmethod

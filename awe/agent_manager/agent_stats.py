@@ -7,7 +7,7 @@ def record_user_payment(user_agent_id: int, pool_amount: int, creator_amount: in
     UserAgentStatsPaymentDailyCounts.add_payment(user_agent_id, pool_amount, creator_amount, session)
 
 
-def record_user_withdraw(user_agent_id: int, amount: int, session: Session):
+def record_user_reward(user_agent_id: int, amount: int, session: Session):
 
     # Add token transfer daily count
     UserAgentStatsTokenTransferDailyCounts.add_transfer(user_agent_id, amount, session)

@@ -14,17 +14,17 @@ from awe.db import engine
 import logging
 import traceback
 from threading import Lock
-from typing import Dict, List
+from typing import Dict
 from awe.models.utils import unix_timestamp_in_seconds
-from .agent_stats import record_user_withdraw, record_user_staking, record_user_staking_release
+from .agent_stats import record_user_staking, record_user_staking_release
 from awe.tg_bot.user_notification import send_user_notification
 
 logger = logging.getLogger("[Agent Fund]")
 
-agent_locks: Dict[int, Lock] = {}
 staking_locks: Dict[int, Lock] = {}
+withdraw_locks: Dict[int, Lock] = {}
 
-class TransferToUserNotAllowedException(Exception):
+class WithdrawNotAllowedException(Exception):
     pass
 
 class ReleaseStakingNotAllowedException(Exception):
@@ -237,47 +237,31 @@ def finalize_user_staking(staking_id: int):
     send_user_notification(agent_id, tg_user_id, "The staking is in position. Have fun!")
 
 
-def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:
+def withdraw_to_user(user_agent_id: int, tg_user_id: str, user_address: str, amount: int) -> str:
 
-    try:
-        amount = int(amount)
-    except:
-        raise TransferToUserNotAllowedException("Invalid amount provided!")
+    logger.info(f"[Withdraw To User] Withdraw $AWE {amount} to user {tg_user_id}({user_address})")
 
-    logger.info(f"[Transfer To User] Transfer from agent {agent_id} to user {tg_user_id}({user_address}): {amount}")
+    # Lock the user to prevent race condition
+    if tg_user_id not in withdraw_locks:
+        withdraw_locks[tg_user_id] = Lock()
 
-    # Lock the agent to prevent race condition
-    if agent_id not in agent_locks:
-        agent_locks[agent_id] = Lock()
-
-    with agent_locks[agent_id]:
+    with withdraw_locks[tg_user_id]:
         with Session(engine) as session:
-            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-            user_agent = session.exec(statement).first()
-
-            current_round = user_agent.agent_data.current_round
-
-            if amount > user_agent.awe_agent.awe_token_config.max_token_per_tx:
-                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
-
-            if amount + user_agent.agent_data.awe_token_round_transferred > user_agent.awe_agent.awe_token_config.max_token_per_round or user_agent.agent_data.awe_token_quote < amount:
-                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
-
             # Update the data in db first
+            statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
+            tg_user_account = session.exec(statement).first()
 
-            # Update round data
-            user_agent.agent_data.awe_token_round_transferred = UserAgentData.awe_token_round_transferred + amount
+            if tg_user_account.balance < amount:
+                raise WithdrawNotAllowedException("Not enough tokens to withdraw in your account")
 
-            # Update game pool
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote - amount
+            tg_user_account.balance = TgUserAccount.balance - amount
 
-            session.add(user_agent.agent_data)
+            session.add(tg_user_account)
 
-            # Record the transfer
+            # Record the withdraw
             user_withdraw = TgUserWithdraw(
-                user_agent_id=agent_id,
+                user_agent_id=user_agent_id,
                 tg_user_id=tg_user_id,
-                user_agent_round=current_round,
                 address=user_address,
                 amount=amount
             )
@@ -287,12 +271,12 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
             session.refresh(user_withdraw)
             user_withdraw_id = user_withdraw.id
 
-    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Withdraw created!")
+    logger.info(f"[Withdraw To User] [User Withdraw {user_withdraw_id}] Withdraw created!")
 
     # Send the transaction
     tx, last_valid_block_height = awe_on_chain.transfer_to_user(f"withdraw_{user_withdraw_id}", user_address, amount)
 
-    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Tx sent! {tx}")
+    logger.info(f"[Withdraw To User] [User Withdraw {user_withdraw_id}] Tx sent! {tx}")
 
     # Record the tx
     with Session(engine) as session:
@@ -306,101 +290,24 @@ def transfer_to_user(agent_id: int, tg_user_id: str, user_address: str, amount: 
         session.add(user_withdraw)
         session.commit()
 
-    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Tx recorded!")
+    logger.info(f"[Withdraw To User] [User Withdraw {user_withdraw_id}] Tx recorded!")
 
     return tx
 
 
-def finalize_transfer_to_user(user_withdraw_id: int):
+def finalize_withdraw_to_user(user_withdraw_id: int):
 
-    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] Finalizing user withdraw")
+    logger.info(f"[Withdraw To User] [User Withdraw {user_withdraw_id}] Finalizing user withdraw")
 
     with Session(engine) as session:
         statement = select(TgUserWithdraw).where(TgUserWithdraw.id == user_withdraw_id)
         user_withdraw = session.exec(statement).first()
-
-        # Record stats
-        record_user_withdraw(user_withdraw.user_agent_id, user_withdraw.address, user_withdraw.amount, session)
-
         user_withdraw.status = TgUserWithdrawStatus.SUCCESS
         session.add(user_withdraw)
 
         session.commit()
 
-    logger.info(f"[Transfer To User] [User Withdraw {user_withdraw_id}] User withdraw finalized!")
-
-
-def batch_transfer_to_users(agent_id: int, user_ids: List[str], user_addresses: List[str], amounts: List[int]) -> str:
-
-    if len(user_ids) > 20:
-        raise Exception("number of users exceeds the maximum allowed in a single transaction")
-
-    # Lock the agent to prevent race condition
-    if agent_id not in agent_locks:
-        agent_locks[agent_id] = Lock()
-
-    max_amount = max(amounts)
-    total_amount = sum(amounts)
-
-    with agent_locks[agent_id]:
-        with Session(engine) as session:
-            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
-            user_agent = session.exec(statement).first()
-
-            current_round = user_agent.agent_data.current_round
-
-            if max_amount > user_agent.awe_agent.awe_token_config.max_token_per_tx:
-                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
-
-            if total_amount + user_agent.agent_data.awe_token_round_transferred > user_agent.awe_agent.awe_token_config.max_token_per_round or user_agent.agent_data.awe_token_quote < total_amount:
-                raise TransferToUserNotAllowedException("Token amount exceeds the maximum allowed!")
-
-            # Update the data in db first
-
-            # Update round data
-            user_agent.agent_data.awe_token_round_transferred = UserAgentData.awe_token_round_transferred + total_amount
-
-            # Update game pool
-            user_agent.agent_data.awe_token_quote = UserAgentData.awe_token_quote - total_amount
-
-            session.add(user_agent.agent_data)
-
-            # Record the withdraws
-            user_withdraws: List[TgUserWithdraw] = []
-
-            for idx, user_id in enumerate(user_ids):
-                user_withdraw = TgUserWithdraw(
-                    user_agent_id=agent_id,
-                    tg_user_id=user_id,
-                    user_agent_round=current_round,
-                    address=user_addresses[idx],
-                    amount=amounts[idx]
-                )
-
-                session.add(user_withdraw)
-                user_withdraws.append(user_withdraw)
-
-            session.commit()
-
-            for user_withdraw in user_withdraws:
-                session.refresh(user_withdraw)
-
-    # Send the transaction
-    tx = awe_on_chain.batch_transfer_to_users(user_addresses, amounts)
-
-    # Record the transaction
-    with Session(engine) as session:
-        for user_withdraw in user_withdraws:
-            user_withdraw.tx_hash = tx
-            session.add(user_withdraw)
-
-        session.commit()
-
-    # Record stats
-    for user_withdraw in user_withdraws:
-        record_user_withdraw(agent_id, user_withdraw.address, user_withdraw.amount)
-
-    return tx
+    logger.info(f"[Withdraw To User] [User Withdraw {user_withdraw_id}] User withdraw finalized!")
 
 
 def release_user_staking(agent_id: int, tg_user_id: str, staking_id: int, wallet_address: str) -> str:

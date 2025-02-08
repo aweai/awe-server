@@ -10,7 +10,7 @@ from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
 from awe.agent_manager.agent_fund import finalize_user_deposit, \
                                         finalize_user_staking, \
-                                        finalize_transfer_to_user, \
+                                        finalize_withdraw_to_user, \
                                         finalize_release_staking, \
                                         finalize_game_pool_charge, \
                                         finalize_refund_agent_staking
@@ -133,7 +133,7 @@ class PaymentProcessor:
                     tx_status = self.get_tx_status(tg_user_withdraw.tx_hash, tg_user_withdraw.tx_last_valid_block_height)
                     self.logger.info(f"[User Withdraw {tg_user_withdraw.id}] Tx status {tx_status}")
                     if tx_status == "success":
-                        finalize_transfer_to_user(tg_user_withdraw.id)
+                        finalize_withdraw_to_user(tg_user_withdraw.id)
                     elif tx_status == "failed":
                         TgUserWithdraw.update_status(tg_user_withdraw.id, TgUserWithdrawStatus.FAILED)
                 except Exception as e:

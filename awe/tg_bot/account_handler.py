@@ -16,6 +16,8 @@ from awe.settings import settings
 from awe.blockchain.phantom import get_connect_url, get_approve_url, get_browser_connect_url, get_browser_approve_url
 from .base_handler import BaseHandler
 import logging
+from awe.agent_manager.agent_fund import withdraw_to_user, WithdrawNotAllowedException
+
 
 logger = logging.getLogger("[AccountHandler]")
 
@@ -81,7 +83,40 @@ class AccountHandler(BaseHandler):
 
 
     async def withraw_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        pass
+        if not await check_maintenance(update, context):
+            return
+        if update.effective_user is None or update.effective_chat is None:
+            return
+
+        user_id = str(update.effective_user.id)
+
+        if len(context.args) != 1:
+            await update.message.reply_text("Command usage: /withdraw <amount>")
+
+        try:
+            amount = int(context.args[0])
+        except:
+            await update.message.reply_text("Invalid amount provided")
+            return
+
+        if amount < settings.min_player_withdraw_amount:
+            await update.message.reply_text(f"Minimum withdraw amount: $AWE {settings.min_player_withdraw_amount}")
+            return
+
+        user_wallet = await self.check_wallet(update, context)
+
+        if user_wallet is None:
+            return
+
+        try:
+            tx = await asyncio.to_thread(withdraw_to_user, self.user_agent_id, user_id, user_wallet.address, amount)
+        except WithdrawNotAllowedException as we:
+            await context.bot.send_message(update.effective_chat.id, we)
+        except Exception as e:
+            logger.error(e)
+            await context.bot.send_message(update.effective_chat.id, "Something is wrong. Please try again later.")
+
+        await context.bot.send_message(update.effective_chat.id, f"$AWE {amount}.00 has been transferred to your wallet {user_wallet.address}. The transaction should be confirmed in a short while:\n\n{tx}")
 
 
     async def wallet_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

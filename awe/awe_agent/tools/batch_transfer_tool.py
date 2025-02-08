@@ -3,7 +3,6 @@ import asyncio
 import logging
 
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
-from awe.agent_manager.agent_fund import batch_transfer_to_users, TransferToUserNotAllowedException
 from pydantic import BaseModel, Field
 from typing import Type, Annotated, List
 
@@ -51,19 +50,19 @@ class BatchAweTransferTool(AweTokenTool):
 
                 wallet_amounts.append(amount)
 
-        try:
-            tx = await asyncio.to_thread(batch_transfer_to_users, self.user_agent_id, user_ids_checked, wallet_addresses, wallet_amounts)
-        except TransferToUserNotAllowedException as e:
-            return str(e)
-        except Exception as e:
-            logger.error(e)
-            return "Something is wrong. Please try again later."
+        # try:
+        #     tx = await asyncio.to_thread(batch_transfer_to_users, self.user_agent_id, user_ids_checked, wallet_addresses, wallet_amounts)
+        # except TransferToUserNotAllowedException as e:
+        #     return str(e)
+        # except Exception as e:
+        #     logger.error(e)
+        #     return "Something is wrong. Please try again later."
 
         # Log the invocation
         for user_id in user_ids_checked:
             await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, user_id, AITools.TOKEN_TRANSFER)
 
-        return f"{reply_message}\nThe transaction should be confirmed in a short while. \n\n{tx}"
+        # return f"{reply_message}\nThe transaction should be confirmed in a short while. \n\n{tx}"
 
     def _run(self, _: str) -> str:
         raise Exception("Sync call should never be used")

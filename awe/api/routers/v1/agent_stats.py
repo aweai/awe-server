@@ -69,7 +69,6 @@ class StatsTokenTransfersResponse(SQLModel):
     days: List[int] = []
     transactions: List[int] = []
     amounts: List[int] = []
-    addresses: List[int] = []
 
 @router.get("/{agent_id}/token-transfers", response_model=Optional[StatsTokenTransfersResponse])
 def get_token_transfers_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_user_agent)]):
@@ -91,18 +90,15 @@ def get_token_transfers_by_agent_id(agent_id, _: Annotated[bool, Depends(validat
         response.days.append(day)
         stats_dict[day] = {
             'transactions': 0,
-            'amounts': 0,
-            'addresses': 0
+            'amounts': 0
         }
 
     for stat in token_stats:
         stats_dict[stat.day]['transactions'] = stat.transactions
         stats_dict[stat.day]['amounts'] = stat.amount
-        stats_dict[stat.day]['addresses'] = stat.addresses
 
     for day in response.days:
         response.transactions.append(stats_dict[day]['transactions'])
-        response.addresses.append(stats_dict[day]['addresses'])
         response.amounts.append(stats_dict[day]['amounts'])
 
     return response
@@ -113,7 +109,6 @@ class StatsUserPaymentResponse(SQLModel):
     transactions: List[int] = []
     pool_amounts: List[int] = []
     creator_amounts: List[int] = []
-    addresses: List[int] = []
 
 @router.get("/{agent_id}/user-payments", response_model=Optional[StatsUserPaymentResponse])
 def get_user_payments_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_user_agent)]):
@@ -136,19 +131,16 @@ def get_user_payments_by_agent_id(agent_id, _: Annotated[bool, Depends(validate_
         stats_dict[day] = {
             'transactions': 0,
             'pool_amounts': 0,
-            'creator_amounts': 0,
-            'addresses': 0
+            'creator_amounts': 0
         }
 
     for stat in token_stats:
         stats_dict[stat.day]['transactions'] = stat.transactions
         stats_dict[stat.day]['pool_amounts'] = stat.pool_amount
         stats_dict[stat.day]['creator_amounts'] = stat.creator_amount
-        stats_dict[stat.day]['addresses'] = stat.addresses
 
     for day in response.days:
         response.transactions.append(stats_dict[day]['transactions'])
-        response.addresses.append(stats_dict[day]['addresses'])
         response.pool_amounts.append(stats_dict[day]['pool_amounts'])
         response.creator_amounts.append(stats_dict[day]['creator_amounts'])
 

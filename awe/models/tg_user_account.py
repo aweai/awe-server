@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field, Session, select
 from typing import Annotated, Optional
 from .utils import unix_timestamp_in_seconds
 from awe.db import engine
+from typing import Tuple
 
 class TgUserAccount(SQLModel, table=True):
     id: Annotated[Optional[int], Field(primary_key=True)]
@@ -11,11 +12,11 @@ class TgUserAccount(SQLModel, table=True):
     created_at: int = Field(index=True, nullable=False, default_factory=unix_timestamp_in_seconds)
 
     @classmethod
-    def get_balance(cls, tg_user_id: str):
+    def get_balance(cls, tg_user_id: str) -> Tuple[int, int]:
         with Session(engine) as session:
             statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
             user_account = session.exec(statement).first()
             if user_account is None:
                 return 0
 
-            return user_account.balance
+            return user_account.balance, user_account.rewards

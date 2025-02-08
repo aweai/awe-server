@@ -58,17 +58,17 @@ class PaymentHandler(BaseHandler):
         price = self.awe_agent.config.awe_token_config.user_price
 
         # Check user balance
-        balance = await asyncio.to_thread(TgUserAccount.get_balance, user_id)
+        balance, rewards = await asyncio.to_thread(TgUserAccount.get_balance, user_id)
 
-        if balance < price:
+        if balance + rewards < price:
             await context.bot.send_message(
                 update.effective_chat.id,
-                f"You don't have enough tokens left in your account:\n\nPrice: $AWE {price}.00, Your balance: $AWE {balance}.00.\n\nPlease deposit using command:\n\n/deposit <amount>"
+                f"You don't have enough tokens left in your account:\n\nPrice: $AWE {price}.00, Your balance: $AWE {balance + rewards}.00.\n\nPlease deposit using command:\n\n/deposit <amount>"
             )
         else:
             await context.bot.send_message(
                 update.effective_chat.id,
-                f"You need to pay to use this Memegent:\n\nPrice: $AWE {price}.00, Your balance: $AWE {balance}.00.\n\nPlease confirm the payment using command:\n\n/pay"
+                f"You need to pay to use this Memegent:\n\nPrice: $AWE {price}.00, Your balance: $AWE {balance + rewards}.00.\n\nPlease confirm the payment using command:\n\n/pay"
             )
 
 
@@ -90,12 +90,10 @@ class PaymentHandler(BaseHandler):
 
         logger.info(f"Processing payment from user {user_id} to agent {self.user_agent_id}")
 
-        agent_and_user_lock_id = f"{self.user_agent_id}_{user_id}"
+        if user_id not in user_locks:
+            user_locks[user_id] = Lock()
 
-        if agent_and_user_lock_id not in user_locks:
-            user_locks[agent_and_user_lock_id] = Lock()
-
-        with user_locks[agent_and_user_lock_id]:
+        with user_locks[user_id]:
             invocation_chances, payment_chances = asyncio.run(self.get_chances(user_id))
             if invocation_chances != 0:
                 return "You have already paid."
@@ -116,10 +114,17 @@ class PaymentHandler(BaseHandler):
                 statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == user_id)
                 user_account = session.exec(statement).first()
 
-                if user_account is None or user_account.balance < price:
-                    return f"You don't have enough tokens left in your account ({price}/{user_account.balance}).\n\nPlease deposit using command:\n\n/deposit <amount>"
+                if user_account is None or user_account.balance + user_account.rewards < price:
+                    return f"You don't have enough tokens left in your account ({price}/{user_account.balance + user_account.rewards}).\n\nPlease deposit using command:\n\n/deposit <amount>"
 
-                user_account.balance = TgUserAccount.balance - price
+                if user_account.rewards >= price:
+                    user_account.rewards = TgUserAccount.rewards - price
+                elif user_account.rewards == 0:
+                    user_account.balance = TgUserAccount.balance - price
+                else:
+                    user_account.rewards = TgUserAccount.rewards - user_account.rewards
+                    user_account.balance = TgUserAccount.balance - (price - user_account.rewards)
+
                 session.add(user_account)
 
                 # 2. Add agent pool

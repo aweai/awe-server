@@ -33,9 +33,12 @@ class AccountHandler(BaseHandler):
 
         user_id = str(update.effective_user.id)
 
-        user_balance = await asyncio.to_thread(TgUserAccount.get_balance, user_id)
+        user_balance, user_rewards = await asyncio.to_thread(TgUserAccount.get_balance, user_id)
 
-        await context.bot.send_message(update.effective_chat.id, f"Your balance is {user_balance}")
+        if user_rewards == 0:
+            await context.bot.send_message(update.effective_chat.id, f"Your balance is $AWE {user_balance}.00")
+        else:
+            await context.bot.send_message(update.effective_chat.id, f"Your balance is $AWE {user_balance + user_rewards}.00 ({user_rewards}.00 can not be withdrew)")
 
 
     async def deposit_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,10 +114,11 @@ class AccountHandler(BaseHandler):
         try:
             tx = await asyncio.to_thread(withdraw_to_user, self.user_agent_id, user_id, user_wallet.address, amount)
         except WithdrawNotAllowedException as we:
-            await context.bot.send_message(update.effective_chat.id, we)
+            await context.bot.send_message(update.effective_chat.id, str(we))
         except Exception as e:
             logger.error(e)
             await context.bot.send_message(update.effective_chat.id, "Something is wrong. Please try again later.")
+            return
 
         await context.bot.send_message(update.effective_chat.id, f"$AWE {amount}.00 has been transferred to your wallet {user_wallet.address}. The transaction should be confirmed in a short while:\n\n{tx}")
 

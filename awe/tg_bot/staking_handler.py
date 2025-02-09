@@ -96,7 +96,7 @@ class StakingHandler(AccountHandler):
             await context.bot.send_message(update.effective_chat.id, f"At least $AWE {settings.min_player_staking_amount} is required")
             return
 
-        user_wallet = await self.check_wallet(update, context, False)
+        user_wallet = await self.check_wallet(update, context)
 
         if user_wallet is None:
             return
@@ -128,7 +128,7 @@ class StakingHandler(AccountHandler):
 
         user_id = str(update.effective_user.id)
 
-        user_wallet = await self.check_wallet(update, context, False)
+        user_wallet = await self.check_wallet(update, context)
 
         if user_wallet is None:
             return

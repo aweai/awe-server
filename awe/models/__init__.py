@@ -21,4 +21,6 @@ from .tg_user_dm_chat import TGUserDMChat
 from .user_agent_refund import UserAgentRefund
 from .tg_user_account import TgUserAccount
 from .tg_user_agent_payment import TgUserAgentPayment
+from .tg_user_agent_reward import TgUserAgentReward
 from .awe_developer_account import AweDeveloperAccount
+from .agent_account_withdraw import AgentAccountWithdraw

@@ -16,7 +16,8 @@ from awe.settings import settings
 import logging
 import re
 from awe.maintenance import is_in_maintenance_sync
-from awe.agent_manager.agent_fund import collect_game_pool_charge, refund_agent_staking
+from awe.agent_manager.agent_fund import collect_game_pool_charge, refund_agent_staking, withdraw_to_creator
+import traceback
 
 
 logger = logging.getLogger("[User Agents API]")
@@ -175,6 +176,7 @@ def get_user_agent_by_id(agent_id, user_address: Annotated[str, Depends(get_curr
         user_agent = session.exec(statement).first()
         return user_agent
 
+
 @router.get("", response_model=list[AgentListResponse])
 def get_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
     return get_local_user_agents(user_address)
@@ -205,6 +207,7 @@ def import_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
 
     return get_local_user_agents(user_address)
 
+
 @router.get("/{agent_id}/data", response_model=Optional[UserAgentData])
 def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_current_user)]):
 
@@ -227,6 +230,7 @@ def get_user_agent_data(agent_id, user_address: Annotated[str, Depends(get_curre
             agent_data = UserAgentData(user_agent_id=agent_id)
 
         return agent_data
+
 
 @router.delete("/{agent_id}")
 def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
@@ -256,7 +260,15 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
         session.commit()
         session.refresh(user_agent)
 
-        background_tasks.add_task(refund_agent_staking, user_agent.id, user_agent.user_address, user_agent.staking_amount)
+        background_tasks.add_task(wrap_refund_agent_staking, user_agent.id, user_agent.user_address, user_agent.staking_amount)
+
+
+def wrap_refund_agent_staking(agent_id, creator_address, amount):
+    try:
+        refund_agent_staking(agent_id, creator_address, amount)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
 
 
 @router.post("/{agent_id}/round", response_model=UserAgentData)
@@ -283,6 +295,7 @@ def start_new_round(agent_id, user_address: Annotated[str, Depends(get_current_u
         session.refresh(agent_data)
 
         return agent_data
+
 
 @router.post("/{agent_id}/pfp")
 def upload_pfp(agent_id, file: UploadFile, _: Annotated[bool, Depends(validate_user_agent)]):
@@ -322,3 +335,40 @@ def charge_game_pool(agent_id: int, amount: Annotated[int, Query(gt=0)], tx: str
             raise HTTPException(400, "Agent not found")
 
     background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
+
+
+def wrap_collect_game_pool_charge(agent_id, user_address, amount, tx):
+    try:
+        collect_game_pool_charge(agent_id, user_address, amount, tx)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+
+
+@router.post("/{agent_id}/account")
+def withdraw_agent_account(agent_id: int, amount: Annotated[int, Query(ge=settings.min_creator_withdraw_amount)], background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+    if is_in_maintenance_sync():
+        raise HTTPException(500, "System in maintenance. Please try again later")
+
+    with Session(engine) as session:
+        statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(
+            UserAgent.id == agent_id,
+            UserAgent.user_address == user_address,
+            UserAgent.deleted_at.is_(None)
+        )
+        user_agent = session.exec(statement).first()
+        if user_agent is None:
+            raise HTTPException(400, "Agent not found")
+
+        if amount + settings.withdraw_tx_fee > user_agent.agent_data.awe_token_creator_balance:
+            raise HTTPException(400, "Not enough balance")
+
+    background_tasks.add_task(wrap_withdraw_to_creator, agent_id, amount)
+
+
+def wrap_withdraw_to_creator(agent_id, amount):
+    try:
+        withdraw_to_creator(agent_id, amount)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())

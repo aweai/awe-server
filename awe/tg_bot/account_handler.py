@@ -94,7 +94,7 @@ class AccountHandler(BaseHandler):
         user_id = str(update.effective_user.id)
 
         if len(context.args) != 1:
-            await update.message.reply_text("Command usage: /withdraw <amount>")
+            await update.message.reply_text(f"Command usage: /withdraw <amount>\n\n(A tx fee of $AWE {settings.withdraw_tx_fee} will be charged)")
 
         try:
             amount = int(context.args[0])
@@ -103,7 +103,7 @@ class AccountHandler(BaseHandler):
             return
 
         if amount < settings.min_player_withdraw_amount:
-            await update.message.reply_text(f"Minimum withdraw amount: $AWE {settings.min_player_withdraw_amount}")
+            await update.message.reply_text(f"Minimum withdraw amount: $AWE {settings.min_player_withdraw_amount}\n\n(A tx fee of $AWE {settings.withdraw_tx_fee} will be charged)")
             return
 
         user_wallet = await self.check_wallet(update, context)

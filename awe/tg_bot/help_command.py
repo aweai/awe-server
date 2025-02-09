@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from awe.settings import settings
 
 def get_help_message() -> str:
     msg = "Commands:\n\n\n"
@@ -9,7 +10,7 @@ def get_help_message() -> str:
     msg = msg + "/staking - Staking info\n\n"
     msg = msg + "/balance - Check your account balance\n\n"
     msg = msg + "/deposit <amount> - Deposit from wallet into your account\n\n"
-    msg = msg + "/withdraw <amount> - Withdraw to your wallet\n\n"
+    msg = msg + f"/withdraw <amount> - Withdraw to your wallet (A tx fee of $AWE {settings.withdraw_tx_fee} will be charged)\n\n"
     msg = msg + "/power - Power info\n\n"
     msg = msg + "/reset - Clear chat history and start over\n\n"
 

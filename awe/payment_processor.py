@@ -8,12 +8,14 @@ from awe.models.user_staking import UserStaking, UserStakingStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
+from awe.models.agent_account_withdraw import AgentAccountWithdraw, AgentAccountWithdrawStatus
 from awe.agent_manager.agent_fund import finalize_user_deposit, \
                                         finalize_user_staking, \
                                         finalize_withdraw_to_user, \
                                         finalize_release_staking, \
                                         finalize_game_pool_charge, \
-                                        finalize_refund_agent_staking
+                                        finalize_refund_agent_staking, \
+                                        finalize_withdraw_to_creator
 from awe.blockchain import awe_on_chain
 import traceback
 import time
@@ -50,6 +52,7 @@ class PaymentProcessor:
             processed = processed + self.process_user_withdraw()
             processed = processed + self.process_release_staking()
             processed = processed + self.process_agent_refund()
+            processed = processed + self.process_agent_account_withdraw()
 
             if processed == 0:
                 time.sleep(5)
@@ -187,6 +190,28 @@ class PaymentProcessor:
                 time.sleep(fetch_interval)
 
             return len(agent_refunds)
+
+
+    def process_agent_account_withdraw(self) -> int:
+        with Session(engine) as session:
+            statement = select(AgentAccountWithdraw).where(AgentAccountWithdraw.status == AgentAccountWithdrawStatus.TX_SENT).order_by(AgentAccountWithdraw.id.asc()).limit(batch_size)
+            agent_withdraws = session.exec(statement).all()
+            for agent_withdraw in agent_withdraws:
+                try:
+                    self.logger.info(f"[Agent Withdraw {agent_withdraw.id}] Check tx status...")
+                    tx_status = self.get_tx_status(agent_withdraw.tx_hash, agent_withdraw.tx_last_valid_block_height)
+                    self.logger.info(f"[Agent Withdraw {agent_withdraw.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_withdraw_to_creator(agent_withdraw.id)
+                    elif tx_status == "failed":
+                        AgentAccountWithdraw.update_status(agent_withdraw.id, AgentAccountWithdrawStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+                time.sleep(fetch_interval)
+
+            return len(agent_withdraws)
 
 
     def get_tx_status(self, tx_hash: str, last_valid_block_height: int) -> str:

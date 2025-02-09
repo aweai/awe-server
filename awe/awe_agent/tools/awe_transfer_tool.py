@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
-from awe.models import UserAgent, UserAgentData, TgUserAccount
+from awe.models import UserAgent, UserAgentData, TgUserAccount, TgUserAgentReward
 from pydantic import BaseModel, Field
 from typing import Type, Dict
 from threading import Lock
@@ -80,6 +80,15 @@ class AweTransferTool(AweTokenTool):
 
                 # 4. Record stats
                 record_user_reward(self.user_agent_id, amount, session)
+
+                # 5. Record the reward
+                tg_user_agent_reward = TgUserAgentReward(
+                    user_agent_id=self.user_agent_id,
+                    tg_user_id=tg_user_id,
+                    round=user_agent.agent_data.current_round,
+                    amount=amount
+                )
+                session.add(tg_user_agent_reward)
 
                 session.commit()
 

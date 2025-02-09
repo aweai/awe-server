@@ -1,11 +1,12 @@
 from awe.models import TgUserDeposit, \
                         TgUserWithdraw, UserAgentData, UserStaking, \
-                        TGBotUserWallet, UserAgent, TgUserAccount, UserReferrals
+                        TGBotUserWallet, UserAgent, TgUserAccount, UserReferrals, AweDeveloperAccount
 from awe.models.tg_user_deposit import TgUserDepositStatus
 from awe.models.user_staking import UserStakingStatus
 from awe.models.tg_user_withdraw import TgUserWithdrawStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
+from awe.models.agent_account_withdraw import AgentAccountWithdraw, AgentAccountWithdrawStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
@@ -23,6 +24,7 @@ logger = logging.getLogger("[Agent Fund]")
 
 staking_locks: Dict[int, Lock] = {}
 withdraw_locks: Dict[int, Lock] = {}
+creator_withdraw_locks: Dict[int, Lock] = {}
 
 class WithdrawNotAllowedException(Exception):
     pass
@@ -251,12 +253,25 @@ def withdraw_to_user(user_agent_id: int, tg_user_id: str, user_address: str, amo
             statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
             tg_user_account = session.exec(statement).first()
 
-            if tg_user_account.balance < amount:
-                raise WithdrawNotAllowedException("Not enough tokens to withdraw in your account")
+            if tg_user_account.balance < amount + settings.withdraw_tx_fee:
+                raise WithdrawNotAllowedException(f"Not enough tokens to withdraw in your account: {amount + settings.withdraw_tx_fee}/{tg_user_account.balance}")
 
-            tg_user_account.balance = TgUserAccount.balance - amount
+            tg_user_account.balance = TgUserAccount.balance - (amount + settings.withdraw_tx_fee)
 
             session.add(tg_user_account)
+
+            # 2. Increase the developer account balance (collect the tx fee)
+            statement = select(AweDeveloperAccount)
+            developer_account = session.exec(statement).first()
+
+            if developer_account is None:
+                developer_account = AweDeveloperAccount(
+                    balance=settings.withdraw_tx_fee
+                )
+            else:
+                developer_account.balance = AweDeveloperAccount.balance + settings.withdraw_tx_fee
+
+            session.add(developer_account)
 
             # Record the withdraw
             user_withdraw = TgUserWithdraw(
@@ -514,3 +529,97 @@ def finalize_refund_agent_staking(refund_id: int):
         session.commit()
 
     logger.info(f"[Refund Agent Staking] [{refund_id}] refund finalized!")
+
+
+def withdraw_to_creator(agent_id: int, amount: int):
+
+    # Record the withdraw request
+    logger.info(f"[Withdraw To Creator] Withdraw $AWE {amount} to the creator of agent {agent_id}")
+
+    # Lock the user to prevent race condition
+    if agent_id not in creator_withdraw_locks:
+        creator_withdraw_locks[agent_id] = Lock()
+
+    with creator_withdraw_locks[agent_id]:
+
+        logger.info(f"[Withdraw To Creator] Processing withdraw $AWE {amount} to the creator of agent {agent_id}")
+
+        with Session(engine) as session:
+
+            statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
+            user_agent = session.exec(statement).first()
+
+            agent_creator_address = user_agent.user_address
+
+            if amount + settings.withdraw_tx_fee > user_agent.agent_data.awe_token_creator_balance:
+                logger.info(f"[Withdraw To Creator] Not enough tokens to withdraw in the agent account: {amount + settings.withdraw_tx_fee}/{user_agent.agent_data.awe_token_creator_balance}")
+                raise WithdrawNotAllowedException(f"Not enough tokens to withdraw in the agent account: {amount + settings.withdraw_tx_fee}/{user_agent.agent_data.awe_token_creator_balance}")
+
+            # 1. Decrease the agent account balance
+            user_agent.agent_data.awe_token_creator_balance = UserAgentData.awe_token_creator_balance - (amount + settings.withdraw_tx_fee)
+            session.add(user_agent.agent_data)
+
+
+            # 2. Increase the developer account balance (collect the tx fee)
+            statement = select(AweDeveloperAccount)
+            developer_account = session.exec(statement).first()
+
+            if developer_account is None:
+                developer_account = AweDeveloperAccount(
+                    balance=settings.withdraw_tx_fee
+                )
+            else:
+                developer_account.balance = AweDeveloperAccount.balance + settings.withdraw_tx_fee
+
+            session.add(developer_account)
+
+            # 3. Create the withdraw request
+
+            agent_withdraw = AgentAccountWithdraw(
+                user_agent_id=agent_id,
+                address=user_agent.user_address,
+                amount=amount
+            )
+            session.add(agent_withdraw)
+            session.commit()
+            session.refresh(agent_withdraw)
+
+            agent_withdraw_id = agent_withdraw.id
+
+    logger.info(f"[Withdraw To Creator] [Agent Withdraw {agent_withdraw_id}] Withdraw created!")
+
+    # Send the transaction
+    tx, last_valid_block_height = awe_on_chain.transfer_to_user(f"agent_withdraw_{agent_withdraw_id}", agent_creator_address, amount)
+
+    logger.info(f"[Withdraw To Creator] [Agent Withdraw {agent_withdraw_id}] Tx sent! {tx}")
+
+    # Record the tx
+    with Session(engine) as session:
+        statement = select(AgentAccountWithdraw).where(AgentAccountWithdraw.id == agent_withdraw_id)
+        agent_withdraw = session.exec(statement).first()
+
+        agent_withdraw.tx_hash = tx
+        agent_withdraw.tx_last_valid_block_height = last_valid_block_height
+        agent_withdraw.status = AgentAccountWithdrawStatus.TX_SENT
+
+        session.add(agent_withdraw)
+        session.commit()
+
+    logger.info(f"[Withdraw To Creator] [Agent Withdraw {agent_withdraw_id}] Tx recorded!")
+
+    return tx
+
+
+def finalize_withdraw_to_creator(agent_withdraw_id: int):
+    logger.info(f"[Withdraw To Creator] [Agent Withdraw {agent_withdraw_id}] finalizing agent account withdraw")
+
+    with Session(engine) as session:
+        statement = select(AgentAccountWithdraw).where(AgentAccountWithdraw.id == agent_withdraw_id)
+        agent_withdraw = session.exec(statement).first()
+
+        agent_withdraw.status = AgentAccountWithdrawStatus.SUCCESS
+
+        session.add(agent_withdraw)
+        session.commit()
+
+    logger.info(f"[Withdraw To Creator] [Agent Withdraw {agent_withdraw_id}] Agent account withdraw finalized!")

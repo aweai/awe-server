@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
 from typing import Optional, Annotated, List
 from pydantic import BaseModel
-from awe.models import UserAgentData, UserAgentWeeklyEmissions, PlayerWeeklyEmissions, StakerWeeklyEmissions
+from awe.models import UserAgentData, UserAgentWeeklyEmissions, PlayerWeeklyEmissions, StakerWeeklyEmissions, AweDeveloperAccount
 from awe.api.dependencies import get_admin
 from awe.blockchain import awe_on_chain
 from awe.models.utils import get_day_as_timestamp
@@ -21,6 +21,7 @@ router = APIRouter(
     prefix="/v1/admin"
 )
 
+
 @router.get("/system/wallet")
 def get_system_wallet(_: Annotated[str, Depends(get_admin)]):
     system_public_key = awe_on_chain.get_system_payer()
@@ -30,10 +31,22 @@ def get_system_wallet(_: Annotated[str, Depends(get_admin)]):
         "balance": awe_on_chain.token_ui_amount(system_balance)
     }
 
+
+@router.get("/system/developer/account")
+def get_developer_account(_: Annotated[str, Depends(get_admin)]):
+    with Session(engine) as session:
+        statement = select(AweDeveloperAccount)
+        account = session.exec(statement).first()
+        if account is None:
+            return 0
+        return account.balance
+
+
 @router.get("/agents/{agent_id}/data", response_model=Optional[UserAgentData])
 def get_user_agent_data(agent_id, _: Annotated[str, Depends(get_admin)]):
     user_agent_data = UserAgentData.get_user_agent_data_by_id(agent_id)
     return user_agent_data
+
 
 class QuoteParams(BaseModel):
     amount: int

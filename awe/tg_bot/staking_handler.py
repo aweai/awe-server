@@ -40,11 +40,12 @@ class StakingHandler(AccountHandler):
 
     async def list_staking(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        tg_user_id = self.get_tg_user_id_from_update(update)
-        if tg_user_id is None:
-            return
+        if update.effective_user is None or update.effective_chat is None:
+            return False
 
-        staking_list = await asyncio.to_thread(UserStaking.get_user_staking_list, self.user_agent_id, tg_user_id)
+        user_id = str(update.effective_user.id)
+
+        staking_list = await asyncio.to_thread(UserStaking.get_user_staking_list, self.user_agent_id, user_id)
 
         if len(staking_list) == 0:
             msg = "You have no staking yet.\n\n"
@@ -86,9 +87,10 @@ class StakingHandler(AccountHandler):
         except:
             await context.bot.send_message(update.effective_chat.id, "Invalid amount provided.")
 
-        user_id = self.get_tg_user_id_from_update(update)
-        if user_id is None:
-            return
+        if update.effective_user is None or update.effective_chat is None:
+            return False
+
+        user_id = str(update.effective_user.id)
 
         if amount < settings.min_player_staking_amount:
             await context.bot.send_message(update.effective_chat.id, f"At least $AWE {settings.min_player_staking_amount} is required")
@@ -121,9 +123,10 @@ class StakingHandler(AccountHandler):
         except:
             await context.bot.send_message(update.effective_chat.id, "Invalid ID provided")
 
-        user_id = self.get_tg_user_id_from_update(update)
-        if user_id is None:
-            return
+        if update.effective_user is None or update.effective_chat is None:
+            return False
+
+        user_id = str(update.effective_user.id)
 
         user_wallet = await self.check_wallet(update, context, False)
 

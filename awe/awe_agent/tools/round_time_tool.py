@@ -9,9 +9,9 @@ import traceback
 logger = logging.getLogger("[SOL Price Tool]")
 
 class RoundTimeTool(BaseTool):
-    name: str = "RountTime"
+    name: str = "RoundTime"
     description: str =  (
-        "Get the round start time and current time"
+        "Get the start time of current round and the current system time"
     )
 
     user_agent_id: int

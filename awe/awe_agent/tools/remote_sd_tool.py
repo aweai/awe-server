@@ -20,7 +20,7 @@ logger = logging.getLogger("[Remote SD Tool]")
 
 
 class RemoteSDInput(BaseModel):
-    amount: str = Field(description="Detailed text-2-image prompt describing the image. The string should be created from the user input, should be as detailed as possible, every element in the image, the shape, color, position of the element, the background.")
+    prompt: str = Field(description="Detailed text-2-image prompt describing the image. The string should be created from the user input, should be as detailed as possible, every element in the image, the shape, color, position of the element, the background.")
 
 
 class RemoteSDTool(BaseTool):

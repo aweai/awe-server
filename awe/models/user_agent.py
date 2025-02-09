@@ -53,7 +53,9 @@ class UserAgent(SQLModel, table=True):
                 or self.awe_agent.awe_token_config.max_payment_per_round < 0 \
                 or self.awe_agent.awe_token_config.user_price < settings.min_player_payment_amount \
                 or self.awe_agent.awe_token_config.game_pool_division < 0 \
-                or self.awe_agent.awe_token_config.game_pool_division > 100:
+                or self.awe_agent.awe_token_config.game_pool_division > 100 \
+                or self.awe_agent.awe_token_config.emission_creator_division < 0 \
+                or self.awe_agent.awe_token_config.emission_creator_division > 100:
 
                 return "Token Distribution is not fully configured!"
 

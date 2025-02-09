@@ -14,6 +14,7 @@ class AweTokenConfig(MutableSABaseModel):
     max_payment_per_round: int = Field(default=0)
     max_invocation_per_payment: int = Field(default=0)
     game_pool_division: Annotated[int, Field(default=70, ge=0, le=100)] = 70
+    emission_creator_division: Annotated[int, Field(default=50, ge=0, le=100)] = 50
 
 AweTokenConfigSAType = AweTokenConfig.to_sa_type()
 

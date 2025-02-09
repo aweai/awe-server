@@ -149,7 +149,7 @@ class StakingHandler(AccountHandler):
     def get_usage_text(self) -> str:
         usage = "Command usage:\n\n"
         usage = usage + "/staking - List your current staking\n"
-        usage = usage + f"/staking add <amount> - Add staking (min {settings.min_player_staking_amount})\n"
-        usage = usage + "/staking release <id> - Release staking"
+        usage = usage + f"/staking add [amount] - Add staking (min {settings.min_player_staking_amount})\n"
+        usage = usage + "/staking release [id] - Release staking"
 
         return usage

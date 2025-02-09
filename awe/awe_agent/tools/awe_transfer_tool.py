@@ -19,7 +19,7 @@ agent_locks: Dict[int, Lock] = {}
 
 
 class AweTransferInput(BaseModel):
-    amount: str = Field(description="the amount of tokens to transfer")
+    amount: int = Field(description="the amount of tokens to transfer")
 
 
 class AweTransferTool(AweTokenTool):

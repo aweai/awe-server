@@ -119,6 +119,56 @@ def collect_user_staking(user_staking_id: int, user_wallet: str, amount: int) ->
 
 
 @app.task
+def collect_agent_creation_staking(creation_id: int, address: str, amount: int) -> Tuple[str, int]:
+
+    logger.info(f"[Agent Creation Staking] [{creation_id}] Collecting agent creation staking: {address}: {amount}")
+
+    system_payer_associated_token_account = spl_token.get_associated_token_address(
+        system_payer.pubkey(),
+        awe_mint_public_key,
+        TOKEN_2022_PROGRAM_ID
+    )
+
+    agent_creator_pub_key = Pubkey.from_string(address)
+    agent_creator_associated_token_account = spl_token.get_associated_token_address(
+        agent_creator_pub_key,
+        awe_mint_public_key,
+        TOKEN_2022_PROGRAM_ID
+    )
+
+    ix = spl_token.transfer_checked(spl_token.TransferCheckedParams(
+        source=agent_creator_associated_token_account,
+        dest=system_payer_associated_token_account,
+        owner=system_payer.pubkey(),
+        amount=int(amount * 1e9),
+        decimals=9,
+        mint=awe_mint_public_key,
+        program_id=TOKEN_2022_PROGRAM_ID
+    ))
+
+    latest_blockhash = http_client.get_latest_blockhash().value
+
+    recent_blockhash = latest_blockhash.blockhash
+    last_valid_block_height = latest_blockhash.last_valid_block_height
+
+    tx = Transaction.new_signed_with_payer(
+        [ix],
+        system_payer.pubkey(),
+        [system_payer],
+        recent_blockhash
+    )
+
+    logger.info(f"[Agent Creation Staking] [{creation_id}] Sending tx: {tx.signatures[0]}")
+
+    send_tx_resp = http_client.send_transaction(tx, TxOpts(skip_confirmation=True))
+
+    logger.info(f"[Agent Creation Staking] [{creation_id}] Tx sent!")
+
+    return str(send_tx_resp.value), last_valid_block_height
+
+
+
+@app.task
 def collect_game_pool_charge(charge_id: int, agent_creator_wallet: str, amount: int) -> Tuple[str, int]:
     logger.info(f"[Game Pool Charge] [{charge_id}] Collecting game pool charge: {agent_creator_wallet}: {amount}")
 

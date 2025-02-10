@@ -9,13 +9,15 @@ from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.tg_user_withdraw import TgUserWithdraw, TgUserWithdrawStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
 from awe.models.agent_account_withdraw import AgentAccountWithdraw, AgentAccountWithdrawStatus
+from awe.models.user_agent_staking import UserAgentStaking, UserAgentStakingStatus
 from awe.agent_manager.agent_fund import finalize_user_deposit, \
                                         finalize_user_staking, \
                                         finalize_withdraw_to_user, \
                                         finalize_release_staking, \
                                         finalize_game_pool_charge, \
                                         finalize_refund_agent_staking, \
-                                        finalize_withdraw_to_creator
+                                        finalize_withdraw_to_creator, \
+                                        finalize_agent_creation_staking
 from awe.blockchain import awe_on_chain
 import traceback
 import time
@@ -53,6 +55,7 @@ class PaymentProcessor:
             processed = processed + self.process_release_staking()
             processed = processed + self.process_agent_refund()
             processed = processed + self.process_agent_account_withdraw()
+            processed = processed + self.process_agent_creation_staking()
 
             if processed == 0:
                 time.sleep(5)
@@ -212,6 +215,27 @@ class PaymentProcessor:
                 time.sleep(fetch_interval)
 
             return len(agent_withdraws)
+
+    def process_agent_creation_staking(self) -> int:
+        with Session(engine) as session:
+            statement = select(UserAgentStaking).where(UserAgentStaking.status == UserAgentStakingStatus.TX_SENT).order_by(UserAgentStaking.id.asc()).limit(batch_size)
+            agent_stakings = session.exec(statement).all()
+            for agent_staking in agent_stakings:
+                try:
+                    self.logger.info(f"[Agent Creation {agent_staking.id}] Check tx status...")
+                    tx_status = self.get_tx_status(agent_staking.tx_hash, agent_staking.tx_last_valid_block_height)
+                    self.logger.info(f"[Agent Creation {agent_staking.id}] Tx status {tx_status}")
+                    if tx_status == "success":
+                        finalize_agent_creation_staking(agent_staking.id)
+                    elif tx_status == "failed":
+                        UserAgentStaking.update_status(agent_staking.id, UserAgentStakingStatus.FAILED)
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+                time.sleep(fetch_interval)
+
+        return len(agent_stakings)
 
 
     def get_tx_status(self, tx_hash: str, last_valid_block_height: int) -> str:

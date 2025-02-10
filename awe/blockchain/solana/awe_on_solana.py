@@ -31,23 +31,15 @@ class AweOnSolana(AweOnChain):
         self.http_client = Client(settings.solana_network_endpoint)
 
 
-    def get_user_num_agents(self, address: str) -> int:
-
-        user_public_key = Pubkey.from_string(address)
-
-        agent_account_public_key, _ = Pubkey.find_program_address(
-            [b"agent_creator", bytes(self.awe_metadata_public_key), bytes(user_public_key)],
-            self.program_id
+    def collect_agent_creation_staking(self, creation_id: int, address: str, amount: int) -> Tuple[str, int]:
+        # Transfer tokens from the user wallet to the system account
+        # Return the transaction hash and the last valid block height
+        task = app.send_task(
+            name='awe.blockchain.solana.tasks.collect_user_fund.collect_agent_creation_staking',
+            args=(creation_id, address, amount)
         )
-        account_data = self.http_client.get_account_info(
-            pubkey=agent_account_public_key,
-        )
-
-        if account_data.value is None:
-            return 0
-
-        account_data_bytes = bytearray(account_data.value.data)
-        return int(account_data_bytes[len(account_data_bytes) - 1])
+        self.logger.info("Sent collect agent creation staking task to the queue")
+        return task.get()
 
 
     def validate_signature(self, public_key: str, message: str, signature: str) -> str | None:

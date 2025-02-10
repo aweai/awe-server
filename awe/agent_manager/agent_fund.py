@@ -7,6 +7,7 @@ from awe.models.tg_user_withdraw import TgUserWithdrawStatus
 from awe.models.game_pool_charge import GamePoolCharge, GamePoolChargeStatus
 from awe.models.user_agent_refund import UserAgentRefund, UserAgentRefundStatus
 from awe.models.agent_account_withdraw import AgentAccountWithdraw, AgentAccountWithdrawStatus
+from awe.models.user_agent_staking import UserAgentStaking, UserAgentStakingStatus
 from awe.blockchain import awe_on_chain
 from awe.settings import settings
 from sqlalchemy.orm import joinedload
@@ -31,6 +32,89 @@ class WithdrawNotAllowedException(Exception):
 
 class ReleaseStakingNotAllowedException(Exception):
     pass
+
+
+def collect_agent_creation_staking(
+    creator_address: str,
+    approve_tx: str
+):
+    logger.info(f"[Collect Agent Creation] Creating agent for wallet: {creator_address}")
+
+    # Record the request
+    with Session(engine) as session:
+        agent_creation_staking = UserAgentStaking(
+            address=creator_address,
+            amount=settings.tn_agent_staking_amount,
+            approve_tx_hash=approve_tx
+        )
+        session.add(agent_creation_staking)
+        session.commit()
+        session.refresh(agent_creation_staking)
+        agent_creation_staking_id = agent_creation_staking.id
+
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Request recorded!")
+
+    try:
+        # Wait for the approve tx to be confirmed before next step
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+    except Exception as e:
+        logger.error(e)
+        logger.error(f"[Collect Agent Creation] [{agent_creation_staking_id}] Error waiting for approve tx confirmation")
+        UserAgentStaking.update_status(agent_creation_staking_id, UserAgentStakingStatus.FAILED)
+        return
+
+    UserAgentStaking.update_status(agent_creation_staking_id, UserAgentStakingStatus.APPROVED)
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Approve tx confirmed!")
+
+    # Collect user deposit
+    tx, last_valid_block_height = awe_on_chain.collect_agent_creation_staking(agent_creation_staking_id, creator_address, settings.tn_agent_staking_amount)
+
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Transfer tx sent! {tx}")
+
+    # Record the transfer tx
+    with Session(engine) as session:
+
+        statement = select(UserAgentStaking).where(
+            UserAgentStaking.id == agent_creation_staking_id
+        )
+
+        agent_creation_staking = session.exec(statement).first()
+        agent_creation_staking.tx_hash = tx
+        agent_creation_staking.tx_last_valid_block_height = last_valid_block_height
+        agent_creation_staking.status = UserAgentStakingStatus.TX_SENT
+        session.add(agent_creation_staking)
+        session.commit()
+
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Transfer tx recorded!")
+
+
+def finalize_agent_creation_staking(agent_creation_staking_id: int):
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Finalizing agent creation")
+
+    with Session(engine) as session:
+        statement = select(UserAgentStaking).where(
+            UserAgentStaking.id == agent_creation_staking_id
+        )
+        agent_creation_staking = session.exec(statement).first()
+
+        # 1. Update the agent creation staking status
+
+        agent_creation_staking.status = UserAgentStakingStatus.SUCCESS
+        session.add(agent_creation_staking)
+
+        # 2. Create the agent
+
+        user_agent = UserAgent(
+            user_address=agent_creation_staking.address,
+            staking_amount=agent_creation_staking.amount,
+            agent_data=UserAgentData()
+        )
+        session.add(user_agent)
+
+        session.commit()
+
+    logger.info(f"[Collect Agent Creation] [{agent_creation_staking_id}] Agent creation finalized!")
+
 
 def collect_user_fund(
     action: str,

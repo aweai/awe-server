@@ -7,8 +7,9 @@ logger = logging.getLogger("[AweOnChain]")
 
 class AweOnChain(ABC):
 # The general interfaces Awe needs to interact with a Blockchain
+
     @abstractmethod
-    def get_user_num_agents(self, address: str) -> int:
+    def collect_agent_creation_staking(self, creation_id: int, address: str, amount: int) -> Tuple[str, int]:
         pass
 
     @abstractmethod

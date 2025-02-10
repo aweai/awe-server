@@ -16,7 +16,7 @@ from awe.settings import settings
 import logging
 import re
 from awe.maintenance import is_in_maintenance_sync
-from awe.agent_manager.agent_fund import collect_game_pool_charge, refund_agent_staking, withdraw_to_creator
+from awe.agent_manager.agent_fund import collect_game_pool_charge, refund_agent_staking, withdraw_to_creator, collect_agent_creation_staking
 import traceback
 
 
@@ -182,30 +182,20 @@ def get_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
     return get_local_user_agents(user_address)
 
 
-@router.post("", response_model=list[AgentListResponse])
-def import_user_agents(user_address: Annotated[str, Depends(get_current_user)]):
+@router.post("")
+def create_user_agent(tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+    if is_in_maintenance_sync():
+        raise HTTPException(500, "System in maintenance. Please try again later.")
 
-    num_agents_on_chain = awe_on_chain.get_user_num_agents(user_address)
+    background_tasks.add_task(wrap_collect_agent_creation_staking, user_address, tx)
 
-    # Check the total number of agents for this user in the db
-    with Session(engine) as session:
-        statement = select(func.count(col(UserAgent.id))).where(UserAgent.user_address == user_address)
-        num_agents_in_db = session.exec(statement).one()
 
-    # Create the missing agents
-    if num_agents_in_db < num_agents_on_chain:
-        with Session(engine) as session:
-            for _ in range(num_agents_on_chain - num_agents_in_db):
-                user_agent = UserAgent(
-                    user_address=user_address,
-                    staking_amount=settings.tn_agent_staking_amount,
-                    agent_data=UserAgentData()
-                )
-                session.add(user_agent)
-
-            session.commit()
-
-    return get_local_user_agents(user_address)
+def wrap_collect_agent_creation_staking(creator_address: str, approve_tx: str):
+    try:
+        collect_agent_creation_staking(creator_address, approve_tx)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
 
 
 @router.get("/{agent_id}/data", response_model=Optional[UserAgentData])
@@ -336,7 +326,7 @@ def charge_game_pool(agent_id: int, amount: Annotated[int, Query(ge=settings.min
         if user_agent is None:
             raise HTTPException(400, "Agent not found")
 
-    background_tasks.add_task(collect_game_pool_charge, agent_id, user_address, amount, tx)
+    background_tasks.add_task(wrap_collect_game_pool_charge, agent_id, user_address, amount, tx)
 
 
 def wrap_collect_game_pool_charge(agent_id, user_address, amount, tx):

@@ -380,6 +380,11 @@ class TGBot:
 
         try:
             self.application.run_polling()
+        except Exception as e:
+            self.logger.error(e)
+            self.logger.error(traceback.format_exc())
         finally:
             self.stopped = True
             send_user_notification_thread.join()
+
+        self.logger.info("TG Bot stopped!")

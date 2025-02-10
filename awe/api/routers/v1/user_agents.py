@@ -260,6 +260,8 @@ def delete_user_agent(agent_id, background_tasks: BackgroundTasks, user_address:
         session.commit()
         session.refresh(user_agent)
 
+        #TODO: Rlease all the player stakings on the Memegent
+
         background_tasks.add_task(wrap_refund_agent_staking, user_agent.id, user_agent.user_address, user_agent.staking_amount)
 
 
@@ -320,7 +322,7 @@ def upload_pfp(agent_id, file: UploadFile, _: Annotated[bool, Depends(validate_u
 
 
 @router.post("/{agent_id}/game-pool")
-def charge_game_pool(agent_id: int, amount: Annotated[int, Query(gt=0)], tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
+def charge_game_pool(agent_id: int, amount: Annotated[int, Query(ge=settings.min_game_pool_charge_amount)], tx: str, background_tasks: BackgroundTasks, user_address: Annotated[str, Depends(get_current_user)]):
     if is_in_maintenance_sync():
         raise HTTPException(500, "System in maintenance. Please try again later")
 

@@ -141,7 +141,7 @@ def update_user_agent(agent_id, user_agent: UserAgent, user_address: Annotated[s
 
     except Exception as e:
         logger.debug(str(e))
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
     with Session(engine) as session:
 

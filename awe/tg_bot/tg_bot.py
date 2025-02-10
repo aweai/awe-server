@@ -23,6 +23,8 @@ from threading import Thread
 from awe.cache import cache
 import json
 from .bot_maintenance import check_maintenance
+import time
+import traceback
 
 
 # Skip regular network logs
@@ -342,32 +344,38 @@ class TGBot:
                 f.write(f"[{current_time}] [Bot] {output}\n")
 
 
-    def send_user_notifications(self):
+    def send_user_notifications(self, loop):
 
-        async def task():
-            while not self.stopped:
-                bot_key = f"TG_BOT_USER_NOTIFICATIONS_{self.user_agent_id}"
-                message = await asyncio.to_thread(cache.lpop, bot_key)
+        self.logger.info(f"Notification thread for agent {self.user_agent_id} started!")
 
-                if message is None:
-                    await asyncio.sleep(1)
-                else:
-                    message_dict = json.loads(message)
-                    if len(message_dict) != 2:
-                        continue
+        while not self.stopped:
+            bot_key = f"TG_BOT_USER_NOTIFICATIONS_{self.user_agent_id}"
+            message = cache.lpop(bot_key)
 
-                    tg_user_id = message_dict[0]
-                    msg = message_dict[1]
-                    await self.send_direct_message(tg_user_id, msg)
-        try:
-            asyncio.run(task())
-        finally:
-            self.logger.info(f"Notification thread for agent {self.user_agent_id} stopped!")
+            if message is None:
+                time.sleep(1)
+            else:
+                message_dict = json.loads(message)
+                if len(message_dict) != 2:
+                    continue
+
+                tg_user_id = message_dict[0]
+                msg = message_dict[1]
+
+                try:
+                    future = asyncio.run_coroutine_threadsafe(self.send_direct_message(tg_user_id, msg), loop)
+                    future.result()
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.error(traceback.format_exc())
+
+        self.logger.info(f"Notification thread for agent {self.user_agent_id} stopped!")
+
 
     def start(self) -> None:
         self.logger.info("Starting TG Bot...")
 
-        send_user_notification_thread = Thread(target=self.send_user_notifications)
+        send_user_notification_thread = Thread(target=self.send_user_notifications, args=(asyncio.get_event_loop(), ))
         send_user_notification_thread.start()
 
         try:

@@ -115,6 +115,7 @@ class AweSettings(BaseSettings):
     min_creator_withdraw_amount: int = 1000
     min_game_pool_charge_amount: int = 1000
     withdraw_tx_fee: int = 10
+    max_messages_per_play: int = 100
 
     def tn_share_user_payment(self, game_pool_division: int, amount: int) -> Tuple[int, int, int]:
 

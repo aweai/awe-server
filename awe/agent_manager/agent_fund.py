@@ -56,7 +56,7 @@ def collect_agent_creation_staking(
 
     try:
         # Wait for the approve tx to be confirmed before next step
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, settings.solana_tx_wait_timeout)
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect Agent Creation] [{agent_creation_staking_id}] Error waiting for approve tx confirmation")
@@ -169,7 +169,7 @@ def collect_user_deposit(agent_id: int, tg_user_id: str, amount: int, approve_tx
 
     try:
         # Wait for the approve tx to be confirmed before next step
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, settings.solana_tx_wait_timeout)
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect User Deposit] [User Deposit {user_deposit_id}] Error waiting for approve tx confirmation")
@@ -271,7 +271,7 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
 
     try:
         # Wait for the approve tx to be confirmed before next step
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, settings.solana_tx_wait_timeout)
     except Exception as e:
         logger.error(e)
         logger.error(f"[Collect User Staking] [User Staking {staking_id}] Error waiting for approve tx confirmation")
@@ -511,7 +511,7 @@ def collect_game_pool_charge(agent_id: int, user_address: str, amount: int, appr
     logger.info(f"[Game Pool Charge] [{charge_id}] Game pool charge request recorded! {approve_tx}")
 
     try:
-        awe_on_chain.wait_for_tx_confirmation(approve_tx, 60)
+        awe_on_chain.wait_for_tx_confirmation(approve_tx, settings.solana_tx_wait_timeout)
     except Exception as e:
         logger.error(e)
         GamePoolCharge.update_status(charge_id, GamePoolChargeStatus.FAILED)

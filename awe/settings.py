@@ -50,7 +50,8 @@ class AweSettings(BaseSettings):
     redis_cache: str
 
     solana_network: SolanaNetwork = SolanaNetwork.Devnet
-    solana_network_endpoint: str = solana_network_endpoints[SolanaNetwork.Devnet]
+    solana_network_endpoint: str = ""
+    solana_tx_wait_timeout: int = 60
 
     solana_awe_metadata_address: str
     solana_awe_mint_address: str
@@ -147,7 +148,8 @@ class AweSettings(BaseSettings):
 
     @model_validator(mode="after")
     def set_solana_network(self) -> Self:
-        self.solana_network_endpoint = solana_network_endpoints[self.solana_network]
+        if self.solana_network_endpoint == "":
+            self.solana_network_endpoint = solana_network_endpoints[self.solana_network]
         return self
 
     @model_validator(mode="after")

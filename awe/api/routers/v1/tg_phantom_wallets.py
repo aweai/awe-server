@@ -133,11 +133,11 @@ def handle_phantom_connect_callback(
 
     # Save the session and phantom_encryption_public_key for future requests
     with Session(engine) as session:
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
 
         if user_wallet is None:
-            user_wallet = TGBotUserWallet(user_agent_id=agent_id, tg_user_id=tg_user_id)
+            user_wallet = TGBotUserWallet(tg_user_id=tg_user_id)
 
         user_wallet.phantom_session = data_dict["session"]
         user_wallet.phantom_encryption_public_key = phantom_encryption_public_key
@@ -204,7 +204,7 @@ def handle_phantom_verify_callback(
 
     # Now the ownership of the wallet is verified. Save the wallet address in DB
     with Session(engine) as session:
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
         user_wallet.address = wallet
         session.add(user_wallet)
@@ -293,7 +293,7 @@ def decrypt_payload(agent_id: int, tg_user_id: str, nonce: str, data: str) -> di
     # Get phantom_encryption_public_key from database
 
     with Session(engine) as session:
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
         if user_wallet is None:
             return {"errorMessage": "User wallet not found"}

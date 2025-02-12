@@ -12,7 +12,7 @@ class AweTokenTool(BaseTool):
     awe_token_config: AweTokenConfig
 
     async def get_tg_user_address_from_id(self, tg_user_id: str) -> str:
-        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, tg_user_id)
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, tg_user_id)
         if user_wallet is None or user_wallet.address is None:
             return ""
 

@@ -143,7 +143,7 @@ def collect_user_deposit(agent_id: int, tg_user_id: str, amount: int, approve_tx
     with Session(engine) as session:
 
         # Get user wallet info from db
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
 
         statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == agent_id)
@@ -249,7 +249,7 @@ def collect_user_staking(agent_id: int, tg_user_id: str, amount: int, approve_tx
     with Session(engine) as session:
 
         # Get user wallet info from db
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
         wallet_address = user_wallet.address
 

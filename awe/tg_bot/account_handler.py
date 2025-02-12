@@ -133,7 +133,7 @@ class AccountHandler(BaseHandler):
 
         user_id = str(update.effective_user.id)
 
-        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, user_id)
 
         if user_wallet is None or user_wallet.address is None or user_wallet.address == "":
             text = "You didn't bind your Solana wallet yet. Click the button below to bind your Solana wallet."
@@ -156,7 +156,7 @@ class AccountHandler(BaseHandler):
 
         user_id = str(update.effective_user.id)
 
-        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, self.user_agent_id, user_id)
+        user_wallet = await asyncio.to_thread(TGBotUserWallet.get_user_wallet, user_id)
 
         if user_wallet is None \
             or user_wallet.address is None or user_wallet.address == "":

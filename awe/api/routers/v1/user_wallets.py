@@ -45,10 +45,10 @@ def handle_bind_wallet(agent_id: int, tg_user_id: str, wallet_address: str, time
 
     # Save the user wallet address
     with Session(engine) as session:
-        statement = select(TGBotUserWallet).where(TGBotUserWallet.user_agent_id == agent_id, TGBotUserWallet.tg_user_id == tg_user_id)
+        statement = select(TGBotUserWallet).where(TGBotUserWallet.tg_user_id == tg_user_id)
         user_wallet = session.exec(statement).first()
         if user_wallet is None:
-            user_wallet = TGBotUserWallet(user_agent_id=agent_id, tg_user_id=tg_user_id)
+            user_wallet = TGBotUserWallet(tg_user_id=tg_user_id)
 
         user_wallet.address = wallet_address
 

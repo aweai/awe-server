@@ -164,9 +164,10 @@ class AweAgent:
     async def clear_message_for_user(self, tg_user_id: str):
         config = {"configurable": {"thread_id": tg_user_id},}
         current_state = await self.graph.aget_state(config)
-        messages = current_state.values["messages"]
-        deleted_messages = [RemoveMessage(id=m.id) for m in messages]
-        await self.graph.aupdate_state(config, {"messages": deleted_messages}, as_node="reset")
+        if "messages" in current_state.values:
+            messages = current_state.values["messages"]
+            deleted_messages = [RemoveMessage(id=m.id) for m in messages]
+            await self.graph.aupdate_state(config, {"messages": deleted_messages}, as_node="reset")
 
 
     def get_system_prompt(self) -> str:

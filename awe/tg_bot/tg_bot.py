@@ -125,7 +125,7 @@ class TGBot:
 
         help_message = get_help_message()
 
-        await self.send_response({"text": start_message + "\n\n" + help_message}, update, context)
+        await self.send_response({"text": start_message + "\n\n" + help_message}, update, context, False)
         await asyncio.to_thread(self.record_dm_chat_id, user_id, chat_id)
 
 
@@ -206,7 +206,7 @@ class TGBot:
             user_id,
             user_id)
 
-        await self.send_response(resp, update, context)
+        await self.send_response(resp, update, context, False)
 
         await self.increase_invocation(user_id)
         await asyncio.to_thread(self.log_interact, user_id, str(update.effective_chat.id), input, resp)
@@ -245,7 +245,7 @@ class TGBot:
                 chat_id
             )
 
-            await self.send_response(resp, update, context)
+            await self.send_response(resp, update, context, True)
             await self.increase_invocation(user_id)
             await asyncio.to_thread(self.log_interact, user_id, chat_id, user_message, resp)
         else:
@@ -266,14 +266,25 @@ class TGBot:
         elif update.message.chat.type in [constants.ChatType.GROUP, constants.ChatType.SUPERGROUP]:
             await self.respond_group(update, context)
 
-    async def send_response(self, resp: dict, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def send_response(self, resp: dict, update: Update, context: ContextTypes.DEFAULT_TYPE, reply: bool):
         if 'image' in resp and resp["image"] is not None and resp["image"] != "":
             image_bytes = await asyncio.to_thread(self.read_image_file, resp["image"])
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_bytes)
-        elif 'text' in resp and resp["text"] is not None and resp["text"] != "":
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=resp["text"])
+
+            if reply:
+                await update.message.reply_photo(photo=image_bytes)
+            else:
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_bytes)
+
         else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="My brain is messed up...try me again")
+            if 'text' in resp and resp["text"] is not None and resp["text"] != "":
+                text = resp["text"]
+            else:
+                text = "My brain is messed up...try me again"
+
+            if reply:
+                await update.message.reply_text(text=text)
+            else:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
 
     def record_dm_chat_id(self, tg_user_id: str, dm_chat_id: str):

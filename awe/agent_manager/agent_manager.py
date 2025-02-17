@@ -8,6 +8,14 @@ from awe.db import engine, init_engine
 from awe.cache import init_cache
 from sqlmodel import Session, select
 
+
+def start_user_agent(user_agent_config: UserAgentConfig):
+    init_engine()
+    init_cache()
+    user_agent = UserAgent(user_agent_config)
+    user_agent.start_tg_bot()
+
+
 class AgentManager:
     def __init__(self) -> None:
         self.user_agent_processes = {}
@@ -26,19 +34,13 @@ class AgentManager:
             self.logger.debug(f"Loaded {len(user_agents)} agents")
             return user_agents
 
-    def start_user_agent(self, user_agent_config: UserAgentConfig):
-        init_engine()
-        init_cache()
-        user_agent = UserAgent(user_agent_config)
-        user_agent.start_tg_bot()
-
     def exit_gracefully(self, signum, frame):
         self.logger.info("Gracefully shutdown the agent manager in 30 seconds...")
         self.kill_now = True
 
     def start_agent_process(self, user_agent_config: UserAgentConfig):
         self.logger.debug(f"Starting user agent process: {user_agent_config.id} / {user_agent_config.user_address}")
-        p = mp.Process(target=self.start_user_agent, args=(user_agent_config,))
+        p = mp.Process(target=start_user_agent, args=(user_agent_config,))
         p.daemon = True
         p.start()
         self.user_agent_processes[user_agent_config.id] = p

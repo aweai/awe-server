@@ -13,9 +13,4 @@ engine = create_engine(
 )
 
 def init_engine():
-    global engine
-    engine = create_engine(
-        settings.db_connection_string,
-        pool_pre_ping=True,
-        pool_recycle=280
-    )
+    engine.dispose(close=False)

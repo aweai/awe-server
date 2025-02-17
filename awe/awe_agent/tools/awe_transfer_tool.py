@@ -2,6 +2,7 @@ from .awe_token_tool import AweTokenTool
 from langchain_core.runnables.config import RunnableConfig
 import asyncio
 import logging
+import traceback
 
 from awe.models.user_agent_stats_invocations import UserAgentStatsInvocations, AITools
 from awe.models import UserAgent, UserAgentData, TgUserAccount, TgUserAgentReward
@@ -34,24 +35,37 @@ class AweTransferTool(AweTokenTool):
 
         tg_user_id = config.get("configurable", {}).get("tg_user_id")
 
+        logger.info(f"[Agent {self.user_agent_id}] Transferring $AWE {amount} to user {tg_user_id}")
+
         try:
             msg = await asyncio.to_thread(self.transfer_to_user_account, amount, tg_user_id)
+
+            logger.info(f"[Agent {self.user_agent_id}] Transfer completed! Updating the stats...")
+
+            # Log the invocation
+            await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.TOKEN_TRANSFER)
+
+            logger.info(f"[Agent {self.user_agent_id}] Stats updated!")
+
         except Exception as e:
             logger.error(e)
+            logger.error(traceback.format_exc())
             return "Something is wrong. Please try again later."
-
-         # Log the invocation
-        await asyncio.to_thread(UserAgentStatsInvocations.add_invocation, self.user_agent_id, tg_user_id, AITools.TOKEN_TRANSFER)
 
         return msg
 
 
     def transfer_to_user_account(self, amount: int, tg_user_id: str) -> str:
         # Lock the agent to prevent race condition
+        logger.info(f"[Agent {self.user_agent_id}] Locking the agent to prevent race condition...")
+
         if self.user_agent_id not in agent_locks:
             agent_locks[self.user_agent_id] = Lock()
 
         with agent_locks[self.user_agent_id]:
+
+            logger.info(f"[Agent {self.user_agent_id}] Start processing the payment")
+
             with Session(engine) as session:
                 statement = select(UserAgent).options(joinedload(UserAgent.agent_data)).where(UserAgent.id == self.user_agent_id)
                 user_agent = session.exec(statement).first()
@@ -91,6 +105,8 @@ class AweTransferTool(AweTokenTool):
                 session.add(tg_user_agent_reward)
 
                 session.commit()
+
+                logger.info(f"[Agent {self.user_agent_id}] DB Tx commited!")
 
                 return f"$AWE {amount}.00 has been successfully transferred to your Awe! account."
 

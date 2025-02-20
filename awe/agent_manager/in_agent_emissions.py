@@ -13,7 +13,7 @@ logger = logging.getLogger("[Player Emissions]")
 page_size = 500
 
 
-def update_all_in_agent_emissions(cycle_end_timestamp: int):
+def distribute_all_in_agent_emissions(cycle_end_timestamp: int):
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
     # Get the list of agent with emissions

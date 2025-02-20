@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from typing import Optional, Annotated, List
 from pydantic import BaseModel
 from awe.models import UserAgentData, UserAgentWeeklyEmissions, PlayerWeeklyEmissions, StakerWeeklyEmissions, AweDeveloperAccount
@@ -7,8 +7,8 @@ from awe.blockchain import awe_on_chain
 from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
-from awe.agent_manager.agent_emissions import update_all_agent_emissions
-from awe.agent_manager.in_agent_emissions import update_all_in_agent_emissions
+from awe.agent_manager.agent_emissions import distribute_all_agent_emissions
+from awe.agent_manager.in_agent_emissions import distribute_all_in_agent_emissions
 import logging
 import traceback
 from awe.db import engine
@@ -58,9 +58,9 @@ def add_user_agent_awe_quote(agent_id, quote_params: QuoteParams, _: Annotated[s
 
 
 @router.post("/system/agent-emissions")
-def update_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+def update_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
-    background_tasks.add_task(update_agent_emissions, last_cycle_end)
+    background_tasks.add_task(update_agent_emissions_task, last_cycle_end, dry_run == 1)
     return "Task initiated!"
 
 
@@ -149,11 +149,14 @@ def get_last_emission_cycle_end_before(before_timestamp: int) -> int:
     return emission_start + (completed_cycles * interval_seconds)
 
 
-def update_agent_emissions(last_cycle_end: int):
+def update_agent_emissions_task(last_cycle_end: int, dry_run: bool):
     try:
-        update_all_agent_scores(last_cycle_end)
-        update_all_agent_emissions(last_cycle_end)
-        update_all_in_agent_emissions(last_cycle_end)
+        update_all_agent_scores(last_cycle_end, dry_run)
+
+        if not dry_run:
+            distribute_all_agent_emissions(last_cycle_end)
+            distribute_all_in_agent_emissions(last_cycle_end)
+
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

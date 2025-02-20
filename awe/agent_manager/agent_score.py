@@ -2,6 +2,7 @@
 from awe.db import engine
 from sqlmodel import Session, select, or_
 from awe.models import UserStaking, UserAgentStatsUserDailyCounts, UserAgent, UserAgentWeeklyEmissions
+from awe.models.user_staking import UserStakingStatus
 from sqlalchemy import func
 from typing import List, Dict, Tuple
 import logging
@@ -13,7 +14,7 @@ logger = logging.getLogger("[Agent Score]")
 
 page_size = 500
 
-def update_all_agent_scores(cycle_end_timestamp: int):
+def update_all_agent_scores(cycle_end_timestamp: int, dry_run: bool):
 
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
@@ -24,6 +25,8 @@ def update_all_agent_scores(cycle_end_timestamp: int):
 
     # Get max staking pool size and max players in this cycle
     max_staking_score, max_player_score = get_max_agent_scores(cycle_start_timestamp, cycle_end_timestamp)
+
+    logger.info(f"max_staking_score: {max_staking_score}, max_player_score: {max_player_score}")
 
 
     # Check if we have already processed this cycle before
@@ -59,17 +62,17 @@ def update_all_agent_scores(cycle_end_timestamp: int):
 
             agent_ids = [agent.id for agent in user_agents]
 
-            logger.info("Getting agent stakings...")
+            logger.debug("Getting agent stakings...")
             agent_stakings = get_agent_stakings(agent_ids, cycle_end_timestamp)
             logger.debug(agent_stakings)
 
-            logger.info("Getting agent players...")
+            logger.debug("Getting agent players...")
             agent_players = get_agent_players(agent_ids, cycle_end_timestamp)
             logger.debug(agent_players)
 
             user_agent_scores = {}
 
-            logger.info("Updating agent scores...")
+            logger.debug("Updating agent scores...")
             for user_agent in user_agents:
 
                 agent_id = user_agent.id
@@ -85,7 +88,7 @@ def update_all_agent_scores(cycle_end_timestamp: int):
                     agent_score = 0 if staking_score + player_score == 0 else 2 * staking_score * player_score / ( staking_score + player_score )
                     agent_score = int(agent_score * 10000)
 
-                logger.debug(f"Agent {agent_id} score {agent_score}")
+                logger.info(f"Agent {agent_id} score {agent_score}")
 
                 user_agent.score = agent_score
 
@@ -106,9 +109,13 @@ def update_all_agent_scores(cycle_end_timestamp: int):
                     else:
                         logger.debug("Agent score zero. Skip record.")
 
-            session.commit()
+            if not dry_run:
+                session.commit()
 
         logger.info(f"{len(user_agents)} agent scores updated")
+
+        if dry_run:
+            return
 
         if cycle_processed_before:
             logger.info(f"Updating cycle emissions instead of creating")
@@ -216,8 +223,7 @@ def get_agent_stakings(agent_ids: List[int], day_timestamp: int) -> Dict[int, in
             UserStaking.user_agent_id.in_(agent_ids),
             or_(UserStaking.released_at.is_(None), UserStaking.released_at >= end_timestamp),
             UserStaking.created_at < start_timestamp,
-            UserStaking.tx_hash.is_not(None),
-            UserStaking.tx_hash != ""
+            UserStaking.status == UserStakingStatus.SUCCESS
         ).group_by(UserStaking.user_agent_id)
 
         user_stakings = session.exec(statement).all()

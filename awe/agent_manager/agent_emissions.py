@@ -11,7 +11,7 @@ logger = logging.getLogger("[Agent Emissions]")
 
 page_size = 500
 
-def distribute_all_agent_emissions(cycle_end_timestamp: int):
+def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
 
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
@@ -71,12 +71,15 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int):
                 emission.emission = math.floor(total_agent_emissions * emission.score / score_sum)
                 session.add(emission)
 
+                logger.info(f"Agent emission: {emission.user_agent_id}: {emission.emission}")
+
                 num_agent_processed += 1
 
                 if num_agent_processed >= top_N:
                     break
 
-            session.commit()
+            if not dry_run:
+                session.commit()
 
             if len(top_agent_emissions) < page_size:
                 break

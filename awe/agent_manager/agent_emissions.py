@@ -63,7 +63,7 @@ def update_total_cycle_emissions(cycle_end_timestamp: int, dry_run: bool):
 
 
 def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool):
-    
+
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
     start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
     end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
@@ -72,7 +72,8 @@ def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool)
 
     total_cycle_emissions = get_total_cycle_emissions(cycle_end_timestamp)
 
-    total_global_staking_emissions = math.floor(total_cycle_emissions * 0.3)
+    total_global_staking_emissions = math.floor(total_cycle_emissions * 0.08) # 8% to stakers
+
     logger.info(f"total cycle emissions: {total_cycle_emissions}, total global staking emissions: {total_global_staking_emissions}")
 
     # calculate staking scores
@@ -201,7 +202,7 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
     total_emissions = get_total_cycle_emissions(cycle_end_timestamp)
     logger.info(f"total_emissions: {total_emissions}")
 
-    total_agent_emissions = math.floor(total_emissions * 0.72)
+    total_agent_emissions = math.floor(total_emissions * 0.67)
     logger.info(f"total_agent_emissions: {total_emissions}")
 
     # Calculate the total scores of top agents

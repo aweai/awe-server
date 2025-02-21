@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
-from awe.agent_manager.agent_emissions import distribute_all_agent_emissions
+from awe.agent_manager.agent_emissions import distribute_all_agent_emissions, update_total_cycle_emissions
 from awe.agent_manager.in_agent_emissions import distribute_all_in_agent_emissions
 import logging
 import traceback
@@ -18,6 +18,13 @@ logger = logging.getLogger("[Emission API]")
 router = APIRouter(
     prefix="/v1/emissions"
 )
+
+
+@router.post("/emissions/cycle")
+def update_cycle_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    background_tasks.add_task(update_total_cycle_emissions_task, last_cycle_end, dry_run == 1)
+    return "Update agent scores task initiated!"
 
 
 @router.post("/agents/scores")
@@ -112,6 +119,14 @@ def get_last_emission_cycle_end_before(before_timestamp: int) -> int:
     completed_cycles = elapsed_time // interval_seconds
 
     return emission_start + (completed_cycles * interval_seconds)
+
+
+def update_total_cycle_emissions_task(last_cycle_end: int, dry_run: bool):
+    try:
+        update_total_cycle_emissions(last_cycle_end, dry_run)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
 
 
 def update_agent_scores_task(last_cycle_end: int, dry_run: bool):

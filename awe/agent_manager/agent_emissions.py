@@ -3,13 +3,63 @@ from sqlmodel import Session, select, or_
 from awe.settings import settings
 from datetime import datetime
 import logging
-from awe.models import UserAgent, UserAgentWeeklyEmissions
+from awe.models import UserAgent, UserAgentWeeklyEmissions, TotalCycleEmissions, UserStaking
 from sqlalchemy import func
 import math
 
 logger = logging.getLogger("[Agent Emissions]")
 
 page_size = 500
+
+
+def update_total_cycle_emissions(cycle_end_timestamp: int, dry_run: bool):
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+
+    with Session(engine) as session:
+
+        statement = select(TotalCycleEmissions).where(
+            TotalCycleEmissions.day == cycle_start_timestamp - settings.tn_emission_interval_days * 86400
+        )
+
+        last_total_cycle_emission = session.exec(statement).first()
+
+        if last_total_cycle_emission is None and cycle_start_timestamp != settings.tn_emission_start:
+            raise Exception("Missing previous emission data")
+
+        # Check if the record already exists
+
+        statement = select(TotalCycleEmissions).where(
+            TotalCycleEmissions.day == cycle_start_timestamp
+        )
+
+        total_cycle_emission = session.exec(statement).first()
+
+        if total_cycle_emission is None:
+            total_cycle_emission = TotalCycleEmissions(
+                day=cycle_start_timestamp
+            )
+
+        if last_total_cycle_emission is None:
+            # The first emission
+            # Let's hard code it
+            logger.info("[Cycle Emission] The first emission")
+            total_cycle_emission.total_emitted_before = 0
+            total_cycle_emission.total_staked = 0
+            total_cycle_emission.emission = 20000000 # 2% (20M) initial emission
+        else:
+            total_staked_now = get_total_staked(cycle_end_timestamp)
+            total_cycle_emission.update_emission(last_total_cycle_emission.emission + last_total_cycle_emission.total_emitted_before, total_staked_now)
+
+        session.add(total_cycle_emission)
+
+        logger.info(f"[Cycle Emission] Total emitted before: {total_cycle_emission.total_emitted_before}, Total staked: {total_cycle_emission.total_staked}, Emission {total_cycle_emission.emission}")
+
+        if dry_run:
+            return
+
+        session.commit()
+        logger.info(f"[Cycle Emission] Emission generated!")
+
 
 def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
 
@@ -92,21 +142,49 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
 def get_total_cycle_emissions(cycle_end_timestamp: int) -> int:
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
-    week_num = (cycle_start_timestamp - settings.tn_emission_start) // (settings.tn_emission_interval_days * 86400)
-    total_supply = 1000000000
+    with Session(engine) as session:
+        statement = select(TotalCycleEmissions).where(
+            TotalCycleEmissions.day == cycle_start_timestamp
+        )
 
-    logger.info(f"Week num: {week_num}")
+        total_cycle_emission = session.exec(statement).first()
 
-    if week_num > 250:
-        return 0
+        if total_cycle_emission is None:
+            raise Exception("Missing emission data")
 
-    if week_num > 150:
-        return math.floor(total_supply * 0.001)
+        return total_cycle_emission.emission
 
-    if week_num > 50:
-        return math.floor(total_supply * 0.003)
 
-    if week_num > 10:
-        return math.floor(total_supply * 0.01)
+def get_total_staked(cycle_end_timestamp: int) -> int:
 
-    return math.floor(total_supply * 0.02)
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+
+    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
+    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
+
+    logger.debug(f"Get total staking for cycle: [{start_datetime}, {end_datetime})")
+
+    with Session(engine) as session:
+
+        # Creator staking
+        statement = select(func.sum(UserAgent.staking_amount)).where(
+            UserAgent.created_at < cycle_end_timestamp,
+            UserAgent.deleted_at.is_(None)
+        )
+
+        total_creator_staking = session.exec(statement).one()
+        logger.debug(f"Total creator staking: {total_creator_staking}")
+
+        # Player staking
+        statement = select(func.sum(UserStaking.amount)).where(
+            UserStaking.created_at < cycle_end_timestamp,
+            or_(
+                UserStaking.release_status.is_(None),
+                UserStaking.released_at >= cycle_end_timestamp
+            )
+        )
+
+        total_player_staking = session.exec(statement).one()
+        logger.debug(f"Total player staking: {total_player_staking}")
+
+        return total_creator_staking + total_player_staking

@@ -16,9 +16,9 @@ class UserAgent(SQLModel, table=True):
     enabled: bool = Field(default=False)
     score: Annotated[int, Field(nullable=False, default=0)] = 0
 
-    created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
+    created_at: int = Field(index=True, nullable=False, default_factory=unix_timestamp_in_seconds)
     updated_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
-    deleted_at: Optional[int] = Field(nullable=True)
+    deleted_at: Optional[int] = Field(index=True, nullable=True)
 
     agent_data: Optional[UserAgentData] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 

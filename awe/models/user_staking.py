@@ -22,7 +22,7 @@ class UserStaking(SQLModel, table=True):
     amount: int = Field(nullable=False)
     approve_tx_hash: str = Field(nullable=True)
     tx_hash: str = Field(nullable=True)
-    created_at: int = Field(nullable=False, default_factory=unix_timestamp_in_seconds)
+    created_at: int = Field(index=True, nullable=False, default_factory=unix_timestamp_in_seconds)
     tx_last_valid_block_height: Annotated[int, Field(nullable=True)]
     status: Annotated[int, Field(default=UserStakingStatus.APPROVING, index=True)] = UserStakingStatus.APPROVING
 

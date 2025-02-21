@@ -1,8 +1,9 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 from awe.db import engine
 from awe.models import UserAgentWeeklyEmissions, \
     TgUserDeposit, UserStaking, UserReferrals, \
     PlayerWeeklyEmissions, StakerWeeklyEmissions
+from awe.models.user_staking import UserStakingStatus
 from awe.settings import settings
 import logging
 from sqlalchemy import func
@@ -168,10 +169,12 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
         with Session(engine) as session:
             statement = select(UserStaking).where(
                 UserStaking.user_agent_id == agent_id,
-                UserStaking.created_at < cycle_end_timestamp,
-                UserStaking.released_at.is_(None),
-                UserStaking.tx_hash.is_not(None),
-                UserStaking.tx_hash != ""
+                UserStaking.status == UserStakingStatus.SUCCESS,
+                UserStaking.created_at < cycle_start_timestamp,
+                or_(
+                    UserStaking.released_at.is_(None),
+                    UserStaking.released_at >= cycle_end_timestamp
+                )
             ).order_by(UserStaking.id.asc()).offset(current_page * page_size).limit(page_size)
 
             user_stakings = session.exec(statement).all()

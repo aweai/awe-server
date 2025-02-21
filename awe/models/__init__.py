@@ -26,3 +26,4 @@ from .awe_developer_account import AweDeveloperAccount
 from .agent_account_withdraw import AgentAccountWithdraw
 from .user_agent_staking import UserAgentStaking
 from .total_cycle_emissions import TotalCycleEmissions
+from .staker_global_weekly_emissions import StakerGlobalWeeklyEmissions

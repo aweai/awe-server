@@ -3,7 +3,8 @@ from sqlmodel import Session, select, or_
 from awe.settings import settings
 from datetime import datetime
 import logging
-from awe.models import UserAgent, UserAgentWeeklyEmissions, TotalCycleEmissions, UserStaking
+from awe.models import UserAgent, UserAgentWeeklyEmissions, TotalCycleEmissions, UserStaking, StakerGlobalWeeklyEmissions
+from awe.models.user_staking import UserStakingStatus
 from sqlalchemy import func
 import math
 
@@ -59,6 +60,120 @@ def update_total_cycle_emissions(cycle_end_timestamp: int, dry_run: bool):
 
         session.commit()
         logger.info(f"[Cycle Emission] Emission generated!")
+
+
+def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool):
+    
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
+    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
+
+    logger.info(f"Updating global staking emissions for cycle: [{start_datetime}, {end_datetime})")
+
+    total_cycle_emissions = get_total_cycle_emissions(cycle_end_timestamp)
+
+    total_global_staking_emissions = math.floor(total_cycle_emissions * 0.3)
+    logger.info(f"total cycle emissions: {total_cycle_emissions}, total global staking emissions: {total_global_staking_emissions}")
+
+    # calculate staking scores
+    current_page = 0
+    while True:
+        with Session(engine) as session:
+            statement = select(UserStaking).where(
+                UserStaking.status == UserStakingStatus.SUCCESS,
+                UserStaking.created_at < cycle_start_timestamp,
+                or_(
+                    UserStaking.released_at.is_(None),
+                    UserStaking.released_at >= cycle_end_timestamp
+                )
+            ).order_by(UserStaking.id.asc()).offset(current_page * page_size).limit(page_size)
+
+            user_stakings = session.exec(statement).all()
+
+            logger.info(f"{len(user_stakings)} user stakings in page {current_page}")
+
+            staking_ids = [staking.id for staking in user_stakings]
+
+            logger.info("global staking scores")
+
+            staking_scores = {}
+            for user_staking in user_stakings:
+                multiplier = user_staking.get_multiplier(cycle_end_timestamp)
+                staking_score = math.floor(user_staking.amount * multiplier)
+                logger.info(f"[Global Staking Score] user id: {user_staking.tg_user_id}, staking_id: {user_staking.id}, staking_amount: {user_staking.amount}, multiplier: {multiplier}, staking_score: {staking_score}")
+                staking_scores[user_staking.id] = [user_staking.tg_user_id, staking_score]
+
+            # Get old records
+            statement = select(StakerGlobalWeeklyEmissions).where(
+                StakerGlobalWeeklyEmissions.staking_id.in_(staking_ids),
+                StakerGlobalWeeklyEmissions.day==cycle_start_timestamp,
+            )
+
+            global_staking_emissions = session.exec(statement).all()
+
+            # Update / delete old records
+            for global_staking_emission in global_staking_emissions:
+                if global_staking_emission.staking_id in staking_scores:
+                    global_staking_emission.score = staking_scores[global_staking_emission.staking_id][1]
+                    session.add(global_staking_emission)
+                    del staking_scores[global_staking_emission.staking_id]
+                else:
+                    session.delete(global_staking_emission)
+
+            # Add new records
+            for staking_id in staking_scores:
+                staking_emission = StakerGlobalWeeklyEmissions(
+                    staking_id=staking_id,
+                    tg_user_id=staking_scores[staking_id][0],
+                    score=staking_scores[staking_id][1],
+                    day=cycle_start_timestamp
+                )
+
+                session.add(staking_emission)
+
+            if not dry_run:
+                session.commit()
+
+            if len(user_stakings) < page_size:
+                break
+
+            current_page += 1
+
+    # Get total staking scores
+    with Session(engine) as session:
+        statement = select(func.sum(StakerGlobalWeeklyEmissions.score)).where(
+            StakerGlobalWeeklyEmissions.day == cycle_start_timestamp
+        )
+
+        total_score = session.exec(statement).one()
+        logger.info(f"total global staking score {total_score}")
+
+    # Update staking emissions
+    current_page = 0
+    while True:
+        with Session(engine) as session:
+            statement = select(StakerGlobalWeeklyEmissions).where(
+                StakerGlobalWeeklyEmissions.day==cycle_start_timestamp,
+            ).order_by(StakerGlobalWeeklyEmissions.id).offset(current_page * page_size).limit(page_size)
+
+            global_staking_emissions = session.exec(statement).all()
+
+            logger.info(f"{len(global_staking_emissions)} staking emissions in page {current_page}")
+
+            for global_staking_emission in global_staking_emissions:
+                global_staking_emission.emission = total_global_staking_emissions * global_staking_emission.score / total_score
+                logger.info(f"[Global Staking Emissions] staking id: {global_staking_emission.id}, staking score: {global_staking_emission.score}, emission: {global_staking_emission.emission}")
+                session.add(global_staking_emission)
+
+            if not dry_run:
+                session.commit()
+
+            if len(global_staking_emissions) < page_size:
+                break
+
+            current_page += 1
+
+    logger.info(f"All global staking emissions updated")
 
 
 def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):

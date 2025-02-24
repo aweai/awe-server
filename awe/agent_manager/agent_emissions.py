@@ -8,6 +8,21 @@ from awe.models.user_staking import UserStakingStatus
 from sqlalchemy import func
 import math
 
+
+# Emissions
+
+#	• Stakers - 8%
+#	• Top - 60.3 % (67% * 0.9)
+#	• New - 18% (20% * 0.9)
+#	• LP - 5%
+#	• Treasury - 8.7% (67% * 0.1 + 20% * 0.1, extracted from below)
+
+# In-Memegent Emissions:
+#	• Stakers - 1/3
+#	• Creators + Players - 2/3
+#	• Treasury - 0 (Moved above)
+
+
 logger = logging.getLogger("[Agent Emissions]")
 
 page_size = 500

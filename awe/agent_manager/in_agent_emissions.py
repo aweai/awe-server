@@ -3,7 +3,7 @@ from awe.db import engine
 from awe.models import UserAgentWeeklyEmissions, \
     TgUserDeposit, UserStaking, UserReferrals, \
     PlayerWeeklyEmissions, StakerWeeklyEmissions, \
-    UserAgent
+    UserAgent, CreatorWeeklyEmissions
 from awe.models.user_staking import UserStakingStatus
 from awe.settings import settings
 import logging
@@ -41,15 +41,23 @@ def distribute_all_in_agent_emissions(cycle_end_timestamp: int):
                 # Player divistion
                 if player_division != 0:
                     logger.info(f"Updating player emissions for agent {agent_emission.user_agent_id}")
-                    update_player_emissions_for_agent(agent_emission.user_agent_id, cycle_end_timestamp, agent_emission.emission * 2 * player_division / 3 )
+                    total_player_emissions = math.floor(agent_emission.emission * 2 * player_division / 3)
+                    update_player_emissions_for_agent(agent_emission.user_agent_id, cycle_end_timestamp, total_player_emissions)
                 else:
                     logger.info(f"No emission is given to players for agent {agent_emission.user_agent_id}")
 
+                # Creator division
+                if creator_division != 0:
+                    logger.info(f"Updating creator emissions for agent {agent_emission.user_agent_id}")
+                    total_creator_emissions = math.floor(agent_emission.emission * 2 * creator_division / 3)
+                    update_creator_emissions_for_agent(agent_emission.user_agent_id, cycle_end_timestamp, total_creator_emissions)
+                else:
+                    logger.info(f"No emission is given to the creator for agent {agent_emission.user_agent_id}")
+
                 # Staker division
                 logger.info(f"Updating staker emissions for agent {agent_emission.user_agent_id}")
-                update_staker_emissions_for_agent(agent_emission.user_agent_id, cycle_end_timestamp, agent_emission.emission / 3)
-
-                #TODO: Creator division
+                total_staker_emissions = math.floor(agent_emission.emission / 3)
+                update_staker_emissions_for_agent(agent_emission.user_agent_id, cycle_end_timestamp, total_staker_emissions)
 
             if len(agent_emissions) < page_size:
                 break
@@ -57,12 +65,11 @@ def distribute_all_in_agent_emissions(cycle_end_timestamp: int):
             current_page += 1
 
 
-def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, agent_emissions: int):
+def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, total_player_emissions: int):
 
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
-    total_player_emissions = math.floor(agent_emissions / 3) # 1/3 (30% )
-    logger.info(f"total agent emissions: {agent_emissions}, total player emissions: {total_player_emissions}")
+    logger.info(f"Total player emissions: {total_player_emissions}")
 
     # Update player scores
     current_page = 0
@@ -171,11 +178,33 @@ def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
     logger.info(f"All player emissions updated for agent {agent_id}")
 
 
-def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, agent_emissions: int):
+def update_creator_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, total_creator_emissions: int):
+
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+    logger.info(f"Total creator emissions: {total_creator_emissions}")
+
+    with Session(engine) as session:
+        statement = select(CreatorWeeklyEmissions).where(CreatorWeeklyEmissions.user_agent_id == agent_id, CreatorWeeklyEmissions.day == cycle_start_timestamp)
+        creator_weekly_emissions = session.exec(statement).first()
+
+        if creator_weekly_emissions is None:
+            creator_weekly_emissions = CreatorWeeklyEmissions(
+                user_agent_id=agent_id,
+                day=cycle_start_timestamp
+            )
+
+        creator_weekly_emissions.emission = total_creator_emissions
+
+        session.add(creator_weekly_emissions)
+        session.commit()
+
+    logger.info(f"Creator emissions updated for agent {agent_id}")
+
+
+def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, total_staker_emissions: int):
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
-    total_staker_emissions = math.floor(agent_emissions * 0.3)
-    logger.info(f"total agent emissions: {agent_emissions}, total staker emissions: {total_staker_emissions}")
+    logger.info(f"Total staker emissions: {total_staker_emissions}")
 
     # Calculating staking scores
 
@@ -262,7 +291,7 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, a
             logger.info(f"{len(staking_emissions)} staking emissions for agent {agent_id} in page {current_page}")
 
             for staking_emission in staking_emissions:
-                staking_emission.emission = total_staker_emissions * staking_emission.score / total_score
+                staking_emission.emission = math.floor(total_staker_emissions * staking_emission.score / total_score)
                 session.add(staking_emission)
 
             session.commit()

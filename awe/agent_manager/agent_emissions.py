@@ -3,8 +3,9 @@ from sqlmodel import Session, select, or_
 from awe.settings import settings
 from datetime import datetime
 import logging
-from awe.models import UserAgent, UserAgentWeeklyEmissions, TotalCycleEmissions, UserStaking, StakerGlobalWeeklyEmissions
+from awe.models import UserAgent, UserAgentData, UserAgentWeeklyEmissions, TotalCycleEmissions, UserStaking
 from awe.models.user_staking import UserStakingStatus
+from awe.models import TgUserAccount, PlayerWeeklyEmissions, CreatorWeeklyEmissions, StakerWeeklyEmissions, StakerGlobalWeeklyEmissions
 from sqlalchemy import func
 import math
 
@@ -269,6 +270,169 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
             current_page += 1
 
     logger.info(f"Updated emission for {num_agent_processed} agents!")
+
+
+def update_all_emission_account_balances(cycle_end_timestamp: int, dry_run: bool):
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+
+    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
+    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
+
+    logger.info(f"Updating account balances for emissions cycle: [{start_datetime}, {end_datetime})")
+
+    #TODO: paging for large scale
+
+    # Global stakers emissions
+    update_global_staking_emission_account_balances(cycle_start_timestamp, dry_run)
+
+    # Memegent - players
+    update_agent_player_emission_account_balances(cycle_start_timestamp, dry_run)
+
+    # Memegent - creators
+    update_agent_creator_emission_account_balances(cycle_start_timestamp, dry_run)
+
+    # Memegent - stakers
+    update_agent_staking_emission_account_balances(cycle_start_timestamp, dry_run)
+
+
+def update_global_staking_emission_account_balances(cycle_start_timestamp: int, dry_run: bool):
+    logger.info(f"Updating Global staking reward balances")
+
+    with Session(engine) as session:
+        statement = select(StakerGlobalWeeklyEmissions).where(StakerGlobalWeeklyEmissions.day == cycle_start_timestamp)
+        staker_emissions = session.exec(statement).all()
+
+        tg_user_ids = []
+        tg_user_emissions = {}
+
+        for staker_emission in staker_emissions:
+            # Might be multiple staking for a single user
+            tg_user_id = staker_emission.tg_user_id
+
+            logger.info(f"Global staking emissions: {tg_user_id}: {staker_emission.emission}")
+
+            if tg_user_id not in tg_user_emissions:
+                tg_user_emissions[tg_user_id] = 0
+                tg_user_ids.append(tg_user_id)
+
+            tg_user_emissions[tg_user_id] += staker_emission.emission
+
+            logger.info(f"Global user emissions: {tg_user_id}: {tg_user_emissions[tg_user_id]}")
+
+        statement = select(TgUserAccount).where(TgUserAccount.tg_user_id.in_(tg_user_ids))
+        tg_user_accounts = session.exec(statement).all()
+
+        for tg_user_account in tg_user_accounts:
+            logger.info(f"Adding balance for user {tg_user_account.tg_user_id}: {tg_user_account.balance} -> {tg_user_emissions[tg_user_account.tg_user_id] + tg_user_account.balance}")
+            tg_user_account.balance = TgUserAccount.balance + tg_user_emissions[tg_user_account.tg_user_id]
+            session.add(tg_user_account)
+
+        if not dry_run:
+            session.commit()
+
+    logger.info(f"Global staking reward balances updated!")
+
+
+def update_agent_player_emission_account_balances(cycle_start_timestamp: int, dry_run: bool):
+    logger.info(f"Update agent player emission balances")
+    with Session(engine) as session:
+        statement = select(PlayerWeeklyEmissions).where(PlayerWeeklyEmissions.day == cycle_start_timestamp)
+        player_emissions = session.exec(statement).all()
+        tg_user_ids = []
+        tg_user_emissions = {}
+
+        for player_emission in player_emissions:
+            # Might be multiple emissions for a single user in multiple agents
+            tg_user_id = player_emission.tg_user_id
+
+            logger.info(f"Single agent player emissions: {tg_user_id}: {player_emission.emission}")
+
+            if tg_user_id not in tg_user_emissions:
+                tg_user_emissions[tg_user_id] = 0
+                tg_user_ids.append(tg_user_id)
+
+            tg_user_emissions[player_emission.tg_user_id] += player_emission.emission
+
+            logger.info(f"All agent player emissions: {tg_user_id}: {tg_user_emissions[tg_user_id]}")
+
+        statement = select(TgUserAccount).where(TgUserAccount.tg_user_id.in_(tg_user_ids))
+        tg_user_accounts = session.exec(statement).all()
+
+        for tg_user_account in tg_user_accounts:
+            logger.info(f"Adding balance for user {tg_user_account.tg_user_id}: {tg_user_account.balance} -> {tg_user_emissions[tg_user_account.tg_user_id] + tg_user_account.balance}")
+            tg_user_account.balance = TgUserAccount.balance + tg_user_emissions[tg_user_account.tg_user_id]
+            session.add(tg_user_account)
+
+        if not dry_run:
+            session.commit()
+
+    logger.info(f"Agent player emission balances updated!")
+
+
+def update_agent_creator_emission_account_balances(cycle_start_timestamp: int, dry_run: bool):
+    logger.info(f"Update agent creator emission balances")
+    with Session(engine) as session:
+        statement = select(CreatorWeeklyEmissions).where(CreatorWeeklyEmissions.day == cycle_start_timestamp)
+        creator_emissions = session.exec(statement).all()
+
+        user_agent_ids = []
+        user_agent_emissions = {}
+
+        for creator_emission in creator_emissions:
+            user_agent_ids.append(creator_emission.user_agent_id)
+            user_agent_emissions[creator_emission.user_agent_id] = creator_emission.emission
+            logger.info(f"Agent emissions: {creator_emission.user_agent_id}: {user_agent_emissions[creator_emission.user_agent_id]}")
+
+        statement = select(UserAgentData).where(UserAgentData.user_agent_id.in_(user_agent_ids))
+        user_agent_data = session.exec(statement).all()
+
+        for agent_data in user_agent_data:
+            logger.info(f"Adding balance for creator {agent_data.tg_user_id}: {agent_data.awe_token_creator_balance} -> {agent_data.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]}")
+            agent_data.awe_token_creator_balance = UserAgentData.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]
+            session.add(agent_data)
+
+        if not dry_run:
+            session.commit()
+
+    logger.info(f"Agent creator emission balances updated!")
+
+
+def update_agent_staking_emission_account_balances(cycle_start_timestamp, dry_run):
+    logger.info(f"Updating Global staking reward balances")
+
+    with Session(engine) as session:
+        statement = select(StakerWeeklyEmissions).where(StakerWeeklyEmissions.day == cycle_start_timestamp)
+        staking_emissions = session.exec(statement).all()
+
+        tg_user_ids = []
+        tg_user_emissions = {}
+
+        for staking_emission in staking_emissions:
+            # Might be multiple staking for a single user
+            tg_user_id = staking_emission.tg_user_id
+
+            logger.info(f"Agent staking emissions: {tg_user_id}: {staking_emission.emission}")
+
+            if tg_user_id not in tg_user_emissions:
+                tg_user_emissions[tg_user_id] = 0
+                tg_user_ids.append(tg_user_id)
+
+            tg_user_emissions[tg_user_id] += staking_emission.emission
+
+            logger.info(f"User emissions: {tg_user_id}: {tg_user_emissions[tg_user_id]}")
+
+        statement = select(TgUserAccount).where(TgUserAccount.tg_user_id.in_(tg_user_ids))
+        tg_user_accounts = session.exec(statement).all()
+
+        for tg_user_account in tg_user_accounts:
+            logger.info(f"Adding balance for user {tg_user_account.tg_user_id}: {tg_user_account.balance} -> {tg_user_emissions[tg_user_account.tg_user_id] + tg_user_account.balance}")
+            tg_user_account.balance = TgUserAccount.balance + tg_user_emissions[tg_user_account.tg_user_id]
+            session.add(tg_user_account)
+
+        if not dry_run:
+            session.commit()
+
+    logger.info(f"Agent staking reward balances updated!")
 
 
 def get_total_cycle_emissions(cycle_end_timestamp: int) -> int:

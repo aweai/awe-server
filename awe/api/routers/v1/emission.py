@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
-from awe.agent_manager.agent_emissions import distribute_all_agent_emissions, update_total_cycle_emissions, distribute_global_staking_emissions
+from awe.agent_manager.agent_emissions import distribute_all_agent_emissions, update_total_cycle_emissions, distribute_global_staking_emissions, update_all_emission_account_balances
 from awe.agent_manager.in_agent_emissions import distribute_all_in_agent_emissions
 import logging
 import traceback
@@ -54,6 +54,11 @@ def update_in_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], backgr
     background_tasks.add_task(update_in_agent_emissions_task, last_cycle_end, dry_run == 1)
     return "Update in-agent emissions task initiated!"
 
+@router.post("/emissions/balance")
+def update_emission_balances(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    background_tasks.add_task(update_in_agent_emissions_task, last_cycle_end, dry_run == 1)
+    return "Update in-agent emissions task initiated!"
 
 @router.get("/agents/emissions", response_model=List[UserAgentWeeklyEmissions])
 def get_agent_emissions(_: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0, page: Optional[int] = 0):
@@ -163,6 +168,14 @@ def update_agent_emissions_task(last_cycle_end: int, dry_run: bool):
 def update_in_agent_emissions_task(last_cycle_end: int, dry_run: bool):
     try:
         distribute_all_in_agent_emissions(last_cycle_end, dry_run)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+
+
+def update_emission_balances_task(last_cycle_end: int, dry_run: bool):
+    try:
+        update_all_emission_account_balances(last_cycle_end, dry_run)
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

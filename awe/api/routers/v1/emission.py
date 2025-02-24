@@ -56,15 +56,15 @@ def update_new_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], backg
 
 
 @router.post("/in-agents/emissions")
-def update_in_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+def update_in_agent_emissions(background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
-    background_tasks.add_task(update_in_agent_emissions_task, last_cycle_end, dry_run == 1)
+    background_tasks.add_task(update_in_agent_emissions_task, last_cycle_end)
     return "Update in-agent emissions task initiated!"
 
 @router.post("/emissions/balance")
 def update_emission_balances(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
-    background_tasks.add_task(update_in_agent_emissions_task, last_cycle_end, dry_run == 1)
+    background_tasks.add_task(update_emission_balances_task, last_cycle_end, dry_run == 1)
     return "Update in-agent emissions task initiated!"
 
 @router.get("/agents/emissions", response_model=List[UserAgentWeeklyEmissions])
@@ -180,9 +180,9 @@ def update_new_agent_emissions_task(last_cycle_end: int, dry_run: bool):
         logger.error(traceback.format_exc())
 
 
-def update_in_agent_emissions_task(last_cycle_end: int, dry_run: bool):
+def update_in_agent_emissions_task(last_cycle_end: int):
     try:
-        distribute_all_in_agent_emissions(last_cycle_end, dry_run)
+        distribute_all_in_agent_emissions(last_cycle_end)
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

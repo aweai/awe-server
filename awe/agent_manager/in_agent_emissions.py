@@ -35,8 +35,10 @@ def distribute_all_in_agent_emissions(cycle_end_timestamp: int):
                 # Get player/creator emission division from agent data
                 statement = select(UserAgent).where(UserAgent.id == agent_emission.user_agent_id)
                 user_agent = session.exec(statement).first()
-                creator_division = user_agent.awe_agent.awe_token_config.emission_creator_division
+                creator_division = user_agent.awe_agent.awe_token_config.emission_creator_division / 100
                 player_division = 1 - creator_division
+
+                logger.info(f"[Agent {agent_emission.user_agent_id}] Creator division: {creator_division}, Player division: {player_division}")
 
                 # Player divistion
                 if player_division != 0:
@@ -77,7 +79,7 @@ def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, t
         with Session(engine) as session:
             # Get player play sessions (num of payments)
             statement = select(TgUserDeposit.tg_user_id, func.count(TgUserDeposit.id)).where(
-                TgUserDeposit.created_at >= cycle_start_timestamp,
+#                TgUserDeposit.created_at >= cycle_start_timestamp,
                 TgUserDeposit.created_at < cycle_end_timestamp,
                 TgUserDeposit.user_agent_id == agent_id,
                 TgUserDeposit.tx_hash.is_not(None),
@@ -214,7 +216,7 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, t
             statement = select(UserStaking).where(
                 UserStaking.user_agent_id == agent_id,
                 UserStaking.status == UserStakingStatus.SUCCESS,
-                UserStaking.created_at < cycle_start_timestamp,
+#                UserStaking.created_at < cycle_start_timestamp,
                 or_(
                     UserStaking.released_at.is_(None),
                     UserStaking.released_at >= cycle_end_timestamp

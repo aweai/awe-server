@@ -178,7 +178,7 @@ def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool)
             logger.info(f"{len(global_staking_emissions)} staking emissions in page {current_page}")
 
             for global_staking_emission in global_staking_emissions:
-                global_staking_emission.emission = total_global_staking_emissions * global_staking_emission.score / total_score
+                global_staking_emission.emission = math.floor(total_global_staking_emissions * global_staking_emission.score / total_score)
                 logger.info(f"[Global Staking Emissions] staking id: {global_staking_emission.id}, staking score: {global_staking_emission.score}, emission: {global_staking_emission.emission}")
                 session.add(global_staking_emission)
 
@@ -320,11 +320,12 @@ def distribute_new_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
             for emission in new_agent_emissions:
 
                 new_agent_emission = math.floor(total_agent_emissions * emission.score / score_sum)
-                emission.emission = UserAgentWeeklyEmissions.emission + new_agent_emission
-                session.add(emission)
 
                 logger.info(f"New agent emission: {emission.user_agent_id}: {new_agent_emission}")
-                logger.info(f"Total agent emission: {emission.emission}")
+                logger.info(f"Total agent emission: {emission.emission + new_agent_emission}")
+
+                emission.emission = UserAgentWeeklyEmissions.emission + new_agent_emission
+                session.add(emission)
 
                 num_agent_processed += 1
 
@@ -455,7 +456,7 @@ def update_agent_creator_emission_account_balances(cycle_start_timestamp: int, d
         user_agent_data = session.exec(statement).all()
 
         for agent_data in user_agent_data:
-            logger.info(f"Adding balance for creator {agent_data.tg_user_id}: {agent_data.awe_token_creator_balance} -> {agent_data.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]}")
+            logger.info(f"Adding balance for creator of agent {agent_data.user_agent_id}: {agent_data.awe_token_creator_balance} -> {agent_data.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]}")
             agent_data.awe_token_creator_balance = UserAgentData.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]
             session.add(agent_data)
 

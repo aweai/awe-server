@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, BackgroundTasks, Query
-from typing import Optional, Annotated, List
+from fastapi import APIRouter, Depends
+from typing import Optional, Annotated
 from pydantic import BaseModel
-from awe.models import UserAgentData, UserAgentWeeklyEmissions, PlayerWeeklyEmissions, StakerWeeklyEmissions, AweDeveloperAccount
+from awe.models import UserAgentData, AweDeveloperAccount, TgUserAccount
 from awe.api.dependencies import get_admin
 from awe.blockchain import awe_on_chain
 
@@ -50,6 +50,25 @@ class QuoteParams(BaseModel):
 def add_user_agent_awe_quote(agent_id, quote_params: QuoteParams, _: Annotated[str, Depends(get_admin)]):
     user_agent_data = UserAgentData.add_awe_token_quote(agent_id, quote_params.amount)
     return user_agent_data
+
+
+class AddBalanceRewardParams(BaseModel):
+    amount: int
+
+@router.post("/users/{tg_user_id}/balance", response_model=TgUserAccount)
+def add_tg_user_balance_reward(tg_user_id: str, reward_params: AddBalanceRewardParams, _: Annotated[str, Depends(get_admin)]):
+    with Session(engine) as session:
+        statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
+        tg_user_account = session.exec(statement).first()
+
+        tg_user_account.rewards = TgUserAccount.rewards + reward_params.amount
+        session.add(tg_user_account)
+        session.commit()
+
+        session.refresh(tg_user_account)
+
+    return tg_user_account
+
 
 @router.post("/system/maintenance")
 def start_maintenance_mode(_: Annotated[str, Depends(get_admin)]) -> bool:

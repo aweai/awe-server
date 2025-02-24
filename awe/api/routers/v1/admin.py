@@ -61,6 +61,9 @@ def add_tg_user_balance_reward(tg_user_id: str, reward_params: AddBalanceRewardP
         statement = select(TgUserAccount).where(TgUserAccount.tg_user_id == tg_user_id)
         tg_user_account = session.exec(statement).first()
 
+        if tg_user_account is None:
+            tg_user_account = TgUserAccount(tg_user_id=tg_user_id)
+
         tg_user_account.rewards = TgUserAccount.rewards + reward_params.amount
         session.add(tg_user_account)
         session.commit()

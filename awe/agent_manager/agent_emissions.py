@@ -194,14 +194,14 @@ def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool)
 
 
 # Top Agent Emissions
-def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
+def distribute_top_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
 
     cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
 
     start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
     end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
 
-    logger.info(f"Updating agent emissions for cycle: [{start_datetime}, {end_datetime})")
+    logger.info(f"Updating top agent emissions for cycle: [{start_datetime}, {end_datetime})")
 
     # Calculate the number of top Memegents
     with Session(engine) as session:
@@ -220,7 +220,7 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
     logger.info(f"total_emissions: {total_emissions}")
 
     total_agent_emissions = math.floor(total_emissions * 0.603) # 60.3% (67% * 0.9)
-    logger.info(f"total_agent_emissions: {total_emissions}")
+    logger.info(f"total_agent_emissions: {total_agent_emissions}")
 
     # Calculate the total scores of top agents
 
@@ -270,6 +270,74 @@ def distribute_all_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
             current_page += 1
 
     logger.info(f"Updated emission for {num_agent_processed} agents!")
+
+
+def distribute_new_agent_emissions(cycle_end_timestamp: int, dry_run: bool):
+
+    # Right now we simply reward all agents
+    cycle_start_timestamp = cycle_end_timestamp - settings.tn_emission_interval_days * 86400
+
+    start_datetime = datetime.fromtimestamp(cycle_start_timestamp).strftime('%Y-%m-%d(%a)')
+    end_datetime = datetime.fromtimestamp(cycle_end_timestamp).strftime('%Y-%m-%d(%a)')
+
+    logger.info(f"Updating new agent emissions for cycle: [{start_datetime}, {end_datetime})")
+
+    total_emissions = get_total_cycle_emissions(cycle_end_timestamp)
+    logger.info(f"total_emissions: {total_emissions}")
+
+    total_agent_emissions = math.floor(total_emissions * 0.18) # 18% (20% * 0.9)
+    logger.info(f"total_agent_emissions: {total_agent_emissions}")
+
+    # Calculate the total scores of all new agents
+
+    with Session(engine) as session:
+        statement = select(func.sum(UserAgentWeeklyEmissions.score)).where(
+            UserAgentWeeklyEmissions.day == cycle_start_timestamp,
+            UserAgentWeeklyEmissions.score != 0
+        )
+
+        score_sum = session.exec(statement).one()
+
+    logger.info(f"Score sum: {score_sum}")
+
+    if score_sum == 0:
+        raise Exception("score_sum is zero!")
+
+    # Update agent emission in batch
+    current_page = 0
+    num_agent_processed = 0
+
+    while True:
+        with Session(engine) as session:
+            statement = select(UserAgentWeeklyEmissions).where(
+                UserAgentWeeklyEmissions.day == cycle_start_timestamp,
+                UserAgentWeeklyEmissions.score != 0
+            ).offset(current_page * page_size).limit(page_size)
+
+            new_agent_emissions = session.exec(statement).all()
+            logger.info(f"num of new_agent_emissions in page {current_page}: {len(new_agent_emissions)}")
+
+            for emission in new_agent_emissions:
+
+                new_agent_emission = math.floor(total_agent_emissions * emission.score / score_sum)
+                emission.emission = UserAgentWeeklyEmissions.emission + new_agent_emission
+                session.add(emission)
+
+                logger.info(f"New agent emission: {emission.user_agent_id}: {new_agent_emission}")
+                logger.info(f"Total agent emission: {emission.emission}")
+
+                num_agent_processed += 1
+
+            if not dry_run:
+                session.commit()
+
+            if len(new_agent_emissions) < page_size:
+                break
+
+            current_page += 1
+
+    logger.info(f"Updated emission for {num_agent_processed} agents!")
+
 
 
 def update_all_emission_account_balances(cycle_end_timestamp: int, dry_run: bool):

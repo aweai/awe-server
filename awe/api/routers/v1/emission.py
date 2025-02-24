@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, BackgroundTasks, Query
 from awe.models.utils import get_day_as_timestamp
 from awe.settings import settings
 from awe.agent_manager.agent_score import update_all_agent_scores
-from awe.agent_manager.agent_emissions import distribute_all_agent_emissions, update_total_cycle_emissions, distribute_global_staking_emissions, update_all_emission_account_balances
+from awe.agent_manager.agent_emissions import distribute_top_agent_emissions, update_total_cycle_emissions, distribute_global_staking_emissions, update_all_emission_account_balances, distribute_new_agent_emissions
 from awe.agent_manager.in_agent_emissions import distribute_all_in_agent_emissions
 import logging
 import traceback
@@ -41,11 +41,18 @@ def update_global_staking_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], 
     return "Update global staking emissions task initiated!"
 
 
-@router.post("/agents/emissions")
-def update_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+@router.post("/agents/top/emissions")
+def update_top_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
     last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
-    background_tasks.add_task(update_agent_emissions_task, last_cycle_end, dry_run == 1)
-    return "Update agent emissions task initiated!"
+    background_tasks.add_task(update_top_agent_emissions_task, last_cycle_end, dry_run == 1)
+    return "Update top agent emissions task initiated!"
+
+
+@router.post("/agents/new/emissions")
+def update_new_agent_emissions(dry_run: Annotated[int, Query(ge=0, le=1)], background_tasks: BackgroundTasks, _: Annotated[str, Depends(get_admin)], last_cycle_before: Optional[int] = 0):
+    last_cycle_end = get_last_emission_cycle_end_before(last_cycle_before)
+    background_tasks.add_task(update_new_agent_emissions_task, last_cycle_end, dry_run == 1)
+    return "Update new agent emissions task initiated!"
 
 
 @router.post("/in-agents/emissions")
@@ -157,9 +164,17 @@ def update_global_staking_emissions_task(last_cycle_end: int, dry_run: bool):
         logger.error(traceback.format_exc())
 
 
-def update_agent_emissions_task(last_cycle_end: int, dry_run: bool):
+def update_top_agent_emissions_task(last_cycle_end: int, dry_run: bool):
     try:
-        distribute_all_agent_emissions(last_cycle_end, dry_run)
+        distribute_top_agent_emissions(last_cycle_end, dry_run)
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+
+
+def update_new_agent_emissions_task(last_cycle_end: int, dry_run: bool):
+    try:
+        distribute_new_agent_emissions(last_cycle_end, dry_run)
     except Exception as e:
         logger.error(e)
         logger.error(traceback.format_exc())

@@ -458,6 +458,7 @@ def update_agent_creator_emission_account_balances(cycle_start_timestamp: int, d
         for agent_data in user_agent_data:
             logger.info(f"Adding balance for creator of agent {agent_data.user_agent_id}: {agent_data.awe_token_creator_balance} -> {agent_data.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]}")
             agent_data.awe_token_creator_balance = UserAgentData.awe_token_creator_balance + user_agent_emissions[agent_data.user_agent_id]
+            agent_data.total_emissions = UserAgentData.total_emissions + user_agent_emissions[agent_data.user_agent_id]
             session.add(agent_data)
 
         if not dry_run:

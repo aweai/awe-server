@@ -101,10 +101,19 @@ class UserReferrals(SQLModel, table=True):
 
             target_user_referrals = session.exec(target_statement).first()
 
-            if target_user_referrals is None:
+            if target_user_referrals is None or target_user_referrals.tg_user_id == tg_user_id:
                 raise CodeNotFound()
 
-            source_user_referrals = cls.get_or_create_user_referrals(tg_user_id)
+            statement = select(UserReferrals).where(
+                UserReferrals.tg_user_id == tg_user_id
+            )
+
+            source_user_referrals = session.exec(statement).first()
+
+            if source_user_referrals is None:
+                source_user_referrals = UserReferrals(
+                    tg_user_id=tg_user_id
+                )
 
             if source_user_referrals.referred_by is not None:
                 raise UserAlreadyReferred()

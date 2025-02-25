@@ -56,16 +56,14 @@ def update_total_cycle_emissions(cycle_end_timestamp: int, dry_run: bool):
                 day=cycle_start_timestamp
             )
 
+        total_staked_now = get_total_staked(cycle_end_timestamp)
+
         if last_total_cycle_emission is None:
-            # The first emission
-            # Let's hard code it
-            logger.info("[Cycle Emission] The first emission")
-            total_cycle_emission.total_emitted_before = 0
-            total_cycle_emission.total_staked = 0
-            total_cycle_emission.emission = 20000000 # 2% (20M) initial emission
+            total_emitted_before = 20000000 # 2% (20M) initial emission
         else:
-            total_staked_now = get_total_staked(cycle_end_timestamp)
-            total_cycle_emission.update_emission(last_total_cycle_emission.emission + last_total_cycle_emission.total_emitted_before, total_staked_now)
+            total_emitted_before = last_total_cycle_emission.emission + last_total_cycle_emission.total_emitted_before
+
+        total_cycle_emission.update_emission(total_emitted_before, total_staked_now)
 
         session.add(total_cycle_emission)
 

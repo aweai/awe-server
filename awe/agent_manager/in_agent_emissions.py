@@ -1,7 +1,7 @@
 from sqlmodel import Session, select, or_
 from awe.db import engine
 from awe.models import UserAgentWeeklyEmissions, \
-    TgUserDeposit, UserStaking, UserReferrals, \
+    TgUserAgentPayment, UserStaking, UserReferrals, \
     PlayerWeeklyEmissions, StakerWeeklyEmissions, \
     UserAgent, CreatorWeeklyEmissions
 from awe.models.user_staking import UserStakingStatus
@@ -78,13 +78,11 @@ def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, t
     while True:
         with Session(engine) as session:
             # Get player play sessions (num of payments)
-            statement = select(TgUserDeposit.tg_user_id, func.count(TgUserDeposit.id)).where(
-#                TgUserDeposit.created_at >= cycle_start_timestamp,
-                TgUserDeposit.created_at < cycle_end_timestamp,
-                TgUserDeposit.user_agent_id == agent_id,
-                TgUserDeposit.tx_hash.is_not(None),
-                TgUserDeposit.tx_hash != ""
-            ).group_by(TgUserDeposit.tg_user_id).order_by(TgUserDeposit.tg_user_id.asc()).offset(current_page * page_size).limit(page_size)
+            statement = select(TgUserAgentPayment.tg_user_id, func.count(TgUserAgentPayment.id)).where(
+#                TgUserAgentPayment.created_at >= cycle_start_timestamp,
+                TgUserAgentPayment.created_at < cycle_end_timestamp,
+                TgUserAgentPayment.user_agent_id == agent_id
+            ).group_by(TgUserAgentPayment.tg_user_id).order_by(TgUserAgentPayment.tg_user_id.asc()).offset(current_page * page_size).limit(page_size)
 
             user_deposit_count = session.exec(statement).all()
 

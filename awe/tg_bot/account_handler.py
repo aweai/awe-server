@@ -115,6 +115,7 @@ class AccountHandler(BaseHandler):
             tx = await asyncio.to_thread(withdraw_to_user, self.user_agent_id, user_id, user_wallet.address, amount)
         except WithdrawNotAllowedException as we:
             await context.bot.send_message(update.effective_chat.id, str(we))
+            return
         except Exception as e:
             logger.error(e)
             await context.bot.send_message(update.effective_chat.id, "Something is wrong. Please try again later.")

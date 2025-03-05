@@ -177,7 +177,7 @@ def distribute_global_staking_emissions(cycle_end_timestamp: int, dry_run: bool)
 
             for global_staking_emission in global_staking_emissions:
                 global_staking_emission.emission = math.floor(total_global_staking_emissions * global_staking_emission.score / total_score)
-                logger.info(f"[Global Staking Emissions] staking id: {global_staking_emission.id}, staking score: {global_staking_emission.score}, emission: {global_staking_emission.emission}")
+                logger.info(f"[Global Staking Emissions] emission id: {global_staking_emission.id}, staking id: {global_staking_emission.staking_id}, staking score: {global_staking_emission.score}, emission: {global_staking_emission.emission}")
                 session.add(global_staking_emission)
 
             if not dry_run:

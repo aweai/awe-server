@@ -79,7 +79,7 @@ def update_player_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, t
         with Session(engine) as session:
             # Get player play sessions (num of payments)
             statement = select(TgUserAgentPayment.tg_user_id, func.count(TgUserAgentPayment.id)).where(
-#                TgUserAgentPayment.created_at >= cycle_start_timestamp,
+                TgUserAgentPayment.created_at >= cycle_start_timestamp,
                 TgUserAgentPayment.created_at < cycle_end_timestamp,
                 TgUserAgentPayment.user_agent_id == agent_id
             ).group_by(TgUserAgentPayment.tg_user_id).order_by(TgUserAgentPayment.tg_user_id.asc()).offset(current_page * page_size).limit(page_size)
@@ -214,7 +214,7 @@ def update_staker_emissions_for_agent(agent_id: int, cycle_end_timestamp: int, t
             statement = select(UserStaking).where(
                 UserStaking.user_agent_id == agent_id,
                 UserStaking.status == UserStakingStatus.SUCCESS,
-#                UserStaking.created_at < cycle_start_timestamp,
+                UserStaking.created_at < cycle_start_timestamp,
                 or_(
                     UserStaking.released_at.is_(None),
                     UserStaking.released_at >= cycle_end_timestamp

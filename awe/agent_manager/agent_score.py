@@ -223,7 +223,7 @@ def get_agent_stakings(agent_ids: List[int], day_timestamp: int) -> Dict[int, in
         statement = select(UserStaking.user_agent_id, func.sum(UserStaking.amount)).where(
             UserStaking.user_agent_id.in_(agent_ids),
             or_(UserStaking.released_at.is_(None), UserStaking.released_at >= end_timestamp),
-#            UserStaking.created_at < start_timestamp,
+            UserStaking.created_at < start_timestamp,
             UserStaking.status == UserStakingStatus.SUCCESS
         ).group_by(UserStaking.user_agent_id)
 
@@ -253,7 +253,7 @@ def get_agent_players(agent_ids: List[int], day_timestamp: int) -> int:
             func.sum(UserAgentStatsUserDailyCounts.users)
         ).where(
             UserAgentStatsUserDailyCounts.user_agent_id.in_(agent_ids),
-#            UserAgentStatsUserDailyCounts.day >= start_timestamp,
+            UserAgentStatsUserDailyCounts.day >= start_timestamp,
             UserAgentStatsUserDailyCounts.day < end_timestamp
         ).group_by(UserAgentStatsUserDailyCounts.user_agent_id)
 
